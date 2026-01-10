@@ -9,6 +9,7 @@ import {
   type AgentLiveClient,
 } from "@deepgram/sdk";
 import { voiceAgentLog } from "@/lib/Logger";
+import { Button } from "../ui/button";
 
 /**
  * Main voice agent interface component
@@ -345,9 +346,7 @@ export const Body = () => {
 
   // === UI RENDER ===
   return (
-    <main className="dg-section dg-text-center">
-      <div className="dg-hero-title">Next.js Voice Agent</div>
-
+    <main className="gap-5 flex items-cetner justify-center">
       {error && <div className="dg-status dg-status--error">{error}</div>}
 
       <Mic state={micState} client={client} onError={setError} />
@@ -359,12 +358,7 @@ export const Body = () => {
             Click the button below to authenticate with Deepgram and start your
             voice conversation.
           </p>
-          <button
-            className="btn btn--primary btn--large"
-            onClick={authenticate}
-          >
-            🔐 Authenticate with Deepgram
-          </button>
+          <Button onClick={authenticate}>🔐 Authenticate with Deepgram</Button>
         </div>
       )}
 

@@ -11,7 +11,8 @@ const notoSans = Noto_Sans({
 
 export const metadata: Metadata = {
   title: "Next.js Voice Agent - Deepgram",
-  description: "Real-time voice agent powered by Deepgram's speech-to-text and text-to-speech technology",
+  description:
+    "Real-time voice agent powered by Deepgram's speech-to-text and text-to-speech technology",
 };
 
 export const viewport: Viewport = {
@@ -26,13 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={notoSans.className} style={{
-        margin: 0,
-        padding: 0,
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
+      <body className={`w-screen h-screen ${notoSans.className}`}>
         {children}
       </body>
     </html>

@@ -346,31 +346,40 @@ export const Body = () => {
 
   // === UI RENDER ===
   return (
-    <main className="gap-5 flex items-cetner justify-center">
-      {error && <div className="dg-status dg-status--error">{error}</div>}
+    <main className="">
+      {error && (
+        <div className="text-red-600 bg-red-100 border border-red-300 p-2 rounded">
+          {error}
+        </div>
+      )}
 
       <Mic state={micState} client={client} onError={setError} />
 
       {!token && (
-        <div className="dg-card">
-          <h2 className="dg-section-heading">Welcome</h2>
-          <p className="dg-status dg-status--info">
+        <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+          <h2 className="text-xl font-bold mb-2">Welcome</h2>
+          <p className="text-blue-600 bg-blue-100 border border-blue-300 p-2 rounded mb-4">
             Click the button below to authenticate with Deepgram and start your
             voice conversation.
           </p>
-          <Button onClick={authenticate}>🔐 Authenticate with Deepgram</Button>
+          <Button
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-lg"
+            onClick={authenticate}
+          >
+            🔐 Authenticate with Deepgram
+          </Button>
         </div>
       )}
 
       {token && !connected && (
-        <div className="dg-card">
-          <h2 className="dg-section-heading">Agent Configuration</h2>
-          <form className="form">
-            <div className="form__group">
-              <label>
+        <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+          <h2 className="text-xl font-bold mb-2">Agent Configuration</h2>
+          <form className="space-y-4">
+            <div>
+              <label className="flex flex-col gap-1">
                 <span>Listen Model:</span>
                 <select
-                  className="form__input"
+                  className="border rounded px-2 py-1"
                   name="listen"
                   value={listenModel}
                   onChange={(e) =>
@@ -382,11 +391,11 @@ export const Body = () => {
                 </select>
               </label>
             </div>
-            <div className="form__group">
-              <label>
+            <div>
+              <label className="flex flex-col gap-1">
                 <span>Think Model:</span>
                 <select
-                  className="form__input"
+                  className="border rounded px-2 py-1"
                   name="think"
                   value={thinkModel}
                   onChange={(e) => setThinkModel(e.target.value as ThinkModel)}
@@ -396,11 +405,11 @@ export const Body = () => {
                 </select>
               </label>
             </div>
-            <div className="form__group">
-              <label>
+            <div>
+              <label className="flex flex-col gap-1">
                 <span>Speech Model:</span>
                 <select
-                  className="form__input"
+                  className="border rounded px-2 py-1"
                   name="speech"
                   value={speechModel}
                   onChange={(e) =>
@@ -416,9 +425,9 @@ export const Body = () => {
                 </select>
               </label>
             </div>
-            <div className="form__group">
+            <div>
               <button
-                className="btn btn--primary btn--large"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-lg"
                 type="button"
                 onClick={connect}
               >
@@ -431,24 +440,31 @@ export const Body = () => {
 
       {connected && (
         <>
-          <div className="dg-card">
-            <h2 className="dg-section-heading">Voice Agent Connected</h2>
+          <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+            <h2 className="text-xl font-bold mb-2">Voice Agent Connected</h2>
             <div
-              className={`dg-status ${isAgentSpeaking ? "dg-status--primary" : "dg-status--success"}`}
+              className={`${
+                isAgentSpeaking
+                  ? "text-blue-700 bg-blue-200 border border-blue-400 p-2 rounded"
+                  : "text-green-700 bg-green-200 border border-green-400 p-2 rounded"
+              }`}
             >
               {isAgentSpeaking
                 ? "🔊 Agent is speaking..."
                 : "✅ Ready for conversation"}
             </div>
-            <button className="btn btn--secondary" onClick={disconnect}>
+            <button
+              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 mt-4"
+              onClick={disconnect}
+            >
               🔌 Disconnect
             </button>
           </div>
 
-          <div className="dg-card">
-            <h2 className="dg-section-heading">Conversation Transcript</h2>
+          <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+            <h2 className="text-xl font-bold mb-2">Conversation Transcript</h2>
             <div
-              className="dg-card dg-card--compact"
+              className="rounded-lg shadow p-4 bg-gray-50 dark:bg-gray-800"
               style={{
                 maxHeight: "300px",
                 overflowY: "auto",
@@ -457,16 +473,15 @@ export const Body = () => {
               }}
             >
               {transcript.length === 0 ? (
-                <div className="dg-status dg-status--info">
+                <div className="text-blue-600 bg-blue-100 border border-blue-300 p-2 rounded">
                   <em>Conversation will appear here...</em>
                 </div>
               ) : (
                 transcript.map((message, index) => (
                   <div
                     key={index}
-                    className="dg-card dg-card--compact"
+                    className="rounded-lg shadow p-2 mb-3"
                     style={{
-                      marginBottom: "var(--dg-space-3)",
                       backgroundColor:
                         message.role === "user"
                           ? "rgba(19, 239, 147, 0.1)"
@@ -487,9 +502,7 @@ export const Body = () => {
                     >
                       {message.role === "user" ? "🗣️ You" : "🤖 Assistant"}:
                     </strong>
-                    <div style={{ marginTop: "var(--dg-space-2)" }}>
-                      {message.content}
-                    </div>
+                    <div className="mt-2">{message.content}</div>
                   </div>
                 ))
               )}

@@ -31,6 +31,9 @@ mongo_client = MongoClient(mongo_uri)
 db = mongo_client["lms"]
 homeworks_col = db["homeworks"]
 submissions_col = db["submissions"]
+courses_col = db["courses"]
+assignments_col = db["assignments"]
+users_col = db["users"]
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -347,7 +350,113 @@ def detect():
     return jsonify(detection_result)
 
 
+@app.route("/api/courses", methods=["GET"])
+def get_courses():
+    """Get courses for a teacher."""
+    teacher_id = request.args.get("teacherId")
+    
+    if not teacher_id:
+        return jsonify({"error": "teacherId required"}), 400
+    
+    courses = list(courses_col.find({"professorId": ObjectId(teacher_id)}))
+    
+    # Add counts
+    for course in courses:
+        course["_id"] = str(course["_id"])
+        course["professorId"] = str(course["professorId"])
+        course["studentCount"] = len(course.get("enrolledStudents", []))
+        course["assignmentCount"] = assignments_col.count_documents({"courseId": ObjectId(course["_id"])})
+        course["enrolledStudents"] = [str(sid) for sid in course.get("enrolledStudents", [])]
+    
+    # Calculate stats
+    total_assignments = sum(c["assignmentCount"] for c in courses)
+    total_submissions = submissions_col.count_documents({"teacherId": ObjectId(teacher_id)})
+    pending_reviews = submissions_col.count_documents({
+        "teacherId": ObjectId(teacher_id),
+        "needsInterview": True,
+        "interviewCompleted": {"$ne": True}
+    })
+    
+    return jsonify({
+        "courses": courses,
+        "stats": {
+            "totalAssignments": total_assignments,
+            "totalSubmissions": total_submissions,
+            "pendingReviews": pending_reviews
+        }
+    })
+
+
+@app.route("/api/courses/<course_id>", methods=["GET"])
+def get_course(course_id):
+    """Get a single course by ID."""
+    try:
+        course = courses_col.find_one({"_id": ObjectId(course_id)})
+        
+        if not course:
+            return jsonify({"error": "Course not found"}), 404
+        
+        course["_id"] = str(course["_id"])
+        course["professorId"] = str(course["professorId"])
+        course["studentCount"] = len(course.get("enrolledStudents", []))
+        course["assignmentCount"] = assignments_col.count_documents({"courseId": ObjectId(course_id)})
+        course["enrolledStudents"] = [str(sid) for sid in course.get("enrolledStudents", [])]
+        
+        return jsonify({"course": course})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/courses/<course_id>/assignments", methods=["GET", "POST"])
+def course_assignments(course_id):
+    """Get or create assignments for a course."""
+    
+    if request.method == "GET":
+        try:
+            assignments = list(assignments_col.find({"courseId": ObjectId(course_id)}))
+            
+            for assignment in assignments:
+                assignment["_id"] = str(assignment["_id"])
+                assignment["courseId"] = str(assignment["courseId"])
+                assignment["professorId"] = str(assignment["professorId"])
+                assignment["submissionCount"] = submissions_col.count_documents({
+                    "assignmentId": ObjectId(assignment["_id"])
+                })
+            
+            return jsonify({"assignments": assignments})
+        except Exception as e:
+            return jsonify({"error": str(e), "assignments": []}), 500
+    
+    elif request.method == "POST":
+        try:
+            data = request.json
+            
+            assignment = {
+                "courseId": ObjectId(course_id),
+                "professorId": ObjectId(data.get("teacherId")),
+                "title": data.get("title"),
+                "description": data.get("description", ""),
+                "instructions": data.get("instructions"),
+                "dueDate": datetime.fromisoformat(data.get("dueDate").replace("Z", "+00:00")),
+                "maxScore": data.get("maxScore", 100),
+                "isPublished": data.get("isPublished", True),
+                "createdAt": datetime.now(),
+                "updatedAt": datetime.now()
+            }
+            
+            result = assignments_col.insert_one(assignment)
+            assignment["_id"] = str(result.inserted_id)
+            assignment["courseId"] = str(assignment["courseId"])
+            assignment["professorId"] = str(assignment["professorId"])
+            assignment["submissionCount"] = 0
+            
+            return jsonify({"assignment": assignment}), 201
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
+
     mode = os.environ.get("MODE", "serve")
     if mode == "write":
         sample = build_secret_replacement_pdf(visible_text="Hello visible world", secret_text="Hello hidden world", output_path=None)

@@ -10,7 +10,12 @@ const DetectionResult = require("./db/detectionResult");
 const Interview = require("./db/interview");
 
 // CONNECT TO MONGODB
-const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://admin:JfxU7wYYrQEaAkXR@lms.atwxuvd.mongodb.net/?appName=lmsn";
+// Ensure database name 'lms' is in the URI (before query parameters)
+let MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://admin:JfxU7wYYrQEaAkXR@lms.atwxuvd.mongodb.net/?appName=lmsn";
+// Add /lms before the ? if database name is missing
+if (!MONGO_URI.match(/\/\w+\?/) && !MONGO_URI.match(/@[^\/]+\/lms/)) {
+  MONGO_URI = MONGO_URI.replace('/?', '/lms?');
+}
 
 async function seed() {
   try {

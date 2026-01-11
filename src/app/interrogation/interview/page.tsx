@@ -20,6 +20,7 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [submissionText, setSubmissionText] = useState('');
   const [visibleSegment, setVisibleSegment] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
@@ -80,13 +81,11 @@ export default function InterviewPage() {
       });
 
       conn.on('open', () => {
-        console.log('TTS connection opened');
         conn.sendText(text);
         conn.flush();
       });
 
       conn.on('audio', (data: any) => {
-        console.log('TTS audio received:', data?.length);
         if (data && data.length > 0) {
           playAudio(new Uint8Array(data));
         }
@@ -97,7 +96,7 @@ export default function InterviewPage() {
       });
 
       conn.on('close', () => {
-        console.log('TTS connection closed');
+        /* closed */
       });
     } catch (err) {
       console.error('TTS init failed', err);
@@ -126,7 +125,6 @@ export default function InterviewPage() {
     } else {
       buffer = audioData;
     }
-    console.log('Queuing audio chunk:', buffer.byteLength, 'bytes');
     audioQueueRef.current.push(buffer);
 
     // Start playback if not already playing
@@ -142,53 +140,43 @@ export default function InterviewPage() {
     isPlayingRef.current = true;
 
     while (audioQueueRef.current.length > 0) {
-      // Buffer chunks for ~300ms for better quality
-      const chunksToMerge = [];
-      let totalSize = 0;
-      const targetBufferSize = 14400; // ~300ms at 24kHz (24000 samples/s * 2 bytes * 0.3s)
-      
-      // Collect first chunk
-      if (audioQueueRef.current.length > 0) {
-        const chunk = audioQueueRef.current.shift()!;
-        chunksToMerge.push(chunk);
-        totalSize += chunk.byteLength;
-      }
-      
-      // Wait briefly for more chunks to arrive
-      await new Promise(resolve => setTimeout(resolve, 30));
-      
-      // Collect additional chunks up to target size
-      while (audioQueueRef.current.length > 0 && totalSize < targetBufferSize) {
-        const chunk = audioQueueRef.current.shift()!;
-        chunksToMerge.push(chunk);
-        totalSize += chunk.byteLength;
-      }
-
-      // Merge chunks
-      const mergedChunk = new Uint8Array(totalSize);
-      let offset = 0;
-      for (const chunk of chunksToMerge) {
-        mergedChunk.set(new Uint8Array(chunk), offset);
-        offset += chunk.byteLength;
-      }
+      const chunk = audioQueueRef.current.shift()!;
 
       try {
-        // Prepend WAV header to merged PCM data
-        const wavHeader = createWavHeader(mergedChunk.byteLength);
-        const wavFile = new Uint8Array(wavHeader.length + mergedChunk.byteLength);
-        wavFile.set(wavHeader, 0);
-        wavFile.set(mergedChunk, wavHeader.length);
-        
-        // Decode the WAV file using Web Audio API
-        const audioBuffer = await ctx.decodeAudioData(wavFile.buffer);
+        // Manual PCM to Float32 conversion (container='none' sends raw PCM)
+        const int16Array = new Int16Array(chunk);
+        const float32Array = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 32768.0;
+        }
+
+        const sourceRate = 24000;
+        const targetRate = ctx.sampleRate || 24000;
+        let data = float32Array;
+        if (sourceRate !== targetRate) {
+          const resampleRatio = targetRate / sourceRate;
+          const newLength = Math.round(float32Array.length * resampleRatio);
+          const resampled = new Float32Array(newLength);
+          for (let i = 0; i < newLength; i++) {
+            const srcIndex = i / resampleRatio;
+            const i0 = Math.floor(srcIndex);
+            const i1 = Math.min(i0 + 1, float32Array.length - 1);
+            const t = srcIndex - i0;
+            resampled[i] = (1 - t) * float32Array[i0] + t * float32Array[i1];
+          }
+          data = resampled;
+        }
+
+        const audioBuffer = ctx.createBuffer(1, data.length, targetRate);
+        audioBuffer.getChannelData(0).set(data);
 
         // Play with minimal gain ramp
         const source = ctx.createBufferSource();
         currentSourceRef.current = source;
         source.buffer = audioBuffer;
         const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.1, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.005);
+        gain.gain.setValueAtTime(0.05, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.003);
 
         source.connect(gain).connect(ctx.destination);
         source.start();
@@ -247,14 +235,13 @@ export default function InterviewPage() {
     dgClient.once(AgentEvents.Welcome, () => {
       dgClient.configure({
         audio: {
-          input: { encoding: 'linear16', sample_rate: 24000 },
-          // Use raw PCM for lowest latency and avoid extra headers
+          input: { encoding: 'linear16', sample_rate: 48000 },
           output: { encoding: 'linear16', sample_rate: 24000, container: 'none' }
         },
         agent: {
+          language: 'en',
           greeting: 'I want to check you understand your assignment. Can you tell me, in your own words, what you wrote?',
-          listen: { provider: { type: 'deepgram', model: 'flux-general-en' } },
-          // Male voice; switch back to Orion for cleaner tone
+          listen: { provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en' } },
           speak: { provider: { type: 'deepgram', model: 'aura-2-orion-en' } },
           think: {
             provider: { type: 'anthropic', model: 'claude-3-5-haiku-20241022' },
@@ -290,7 +277,7 @@ export default function InterviewPage() {
                 }
               }
             ],
-            prompt: `You are conducting a verification interview. Keep questions short, direct, and frequent. No judging or feedback.
+            prompt: `You are conducting a verification interview. Keep messages ultra short (ideally 1 sentence), direct, and frequent. No judging or feedback.
 
 SUBMISSION TEXT:
 """
@@ -300,7 +287,7 @@ ${submissionText.slice(0, 5000)}
 GUIDE:
 - Start with a quick opener: "Give me your main point in one or two sentences."
 - Drill into specific details from THEIR text (quotes, examples, claims) with concise follow-ups.
-- Ask more often: many short questions instead of a few long ones.
+ - Ask more often: many short questions instead of a few long ones; keep each message to one sentence when possible.
 - Stay neutral: do not say what's correct/incorrect; no assessments.
 - Use brief acknowledgments: "Got it," "Thanks," "Okay," then move to the next question.
 - Keep it conversational and fast-paced; avoid long monologues.
@@ -348,16 +335,52 @@ Use these functions when you need the student to see specific text, then hide it
       });
     });
 
-    // Handle function calls from the LLM
+    // Handle function calls from the LLM (guarded parsing so we never throw)
     dgClient.on(AgentEvents.FunctionCallRequest, (functionCall: any) => {
-      if (functionCall.function_name === 'show_text_segment') {
-        const args = JSON.parse(functionCall.input || '{}');
+      console.log('[FunctionCallRequest] Raw payload:', JSON.stringify(functionCall));
+      
+      // Extract from functions array if present
+      const fn = functionCall?.functions?.[0] || functionCall;
+      
+      const fnName = fn?.name || fn?.function_name || 'noop';
+      const fnId = fn?.id;
+      const rawArgs = fn?.arguments || fn?.input;
+      
+      let args: any = {};
+      if (rawArgs !== undefined) {
+        try {
+          args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
+        } catch (err) {
+          console.error('FunctionCallRequest parse error', err, rawArgs);
+          args = {};
+        }
+      }
+
+      let contentResponse = 'ok';
+      if (fnName === 'show_text_segment') {
         setVisibleSegment(args.segment || null);
-      } else if (functionCall.function_name === 'hide_text_segment') {
+        contentResponse = 'shown';
+      } else if (fnName === 'hide_text_segment') {
         setVisibleSegment(null);
-      } else if (functionCall.function_name === 'finish_interview') {
+        contentResponse = 'hidden';
+      } else if (fnName === 'finish_interview') {
         saveTranscript();
         setIsComplete(true);
+        contentResponse = 'finished';
+      } else {
+        contentResponse = 'noop';
+      }
+
+      // Only respond if we have an id
+      if (fnId) {
+        console.log('[FunctionCallResponse] Sending:', { id: fnId, name: fnName, content: contentResponse });
+        try {
+          dgClient.functionCallResponse({ id: fnId, name: fnName, content: contentResponse });
+        } catch (err) {
+          console.error('FunctionCallResponse failed', err);
+        }
+      } else {
+        console.warn('[FunctionCallRequest] No ID present, skipping response');
       }
     });
   };
@@ -392,6 +415,19 @@ Use these functions when you need the student to see specific text, then hide it
 
   return (
     <div className="min-h-screen">
+      {/* Popup overlay for visible segment */}
+      {visibleSegment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-xl">
+            <h3 className="text-lg font-semibold text-foreground mb-3">Reference Snippet</h3>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap mb-4">{visibleSegment}</p>
+            <Button onClick={() => setVisibleSegment(null)} variant="outline" className="w-full">
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-5xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8 pb-6">
@@ -413,13 +449,6 @@ Use these functions when you need the student to see specific text, then hide it
         {/* Main content */}
         {!isComplete ? (
           <div className="space-y-6">
-            {visibleSegment && (
-              <div className="border border-border bg-white rounded-lg p-4 shadow-sm">
-                <p className="text-sm font-semibold text-foreground mb-2">Reference snippet</p>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{visibleSegment}</p>
-              </div>
-            )}
-
             {/* Loading / Error */}
             {!token && !error && (
               <div className="border border-border bg-white rounded-lg p-4 shadow-sm flex items-center gap-2">
@@ -461,7 +490,7 @@ Use these functions when you need the student to see specific text, then hide it
               <div className="border border-border bg-white rounded-lg p-6 max-h-96 overflow-y-auto space-y-4 shadow-sm">
                 {transcript.map((msg, idx) => (
                   <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
-                    <div className={`inline-block max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-muted text-foreground' : 'bg-accent text-accent-foreground'}`}>
+                    <div className={`inline-block max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-muted text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
                       <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'You' : 'Interviewer'}</p>
                       <p>{msg.content}</p>
                     </div>
@@ -475,7 +504,14 @@ Use these functions when you need the student to see specific text, then hide it
               <div className="border border-border bg-white rounded-lg p-6 shadow-sm">
                 <div className="flex flex-col items-center gap-4">
                   <p className="text-foreground font-semibold">{micState === 'open' ? 'Listening...' : 'Loading audio...'}</p>
-                  <Mic state={micState} client={client} />
+                  <Mic state={isMuted ? 'closed' : micState} client={client} />
+                  <Button
+                    onClick={() => setIsMuted(!isMuted)}
+                    variant={isMuted ? 'destructive' : 'outline'}
+                    className="h-10"
+                  >
+                    {isMuted ? '🔇 Unmute Microphone' : '🔊 Mute Microphone'}
+                  </Button>
                 </div>
               </div>
             )}

@@ -325,40 +325,16 @@ Original Prompt:
             elif "injection" in mutation_type and mut:
                 applied = False
                 
-                # Strategy 1: If orig is provided and exists, replace it with the mutated version
+                # If LLM provided an insertion point (original_text), use it
                 if orig and orig in mutated:
                     mutated = mutated.replace(orig, mut, 1)
-                    print(f"DEBUG: Applied injection as targeted replacement")
+                    print(f"DEBUG: Applied injection at LLM-suggested insertion point")
                     applied = True
                 else:
-                    # Strategy 2: Find a good insertion point based on context
-                    # Look for common instruction patterns to insert after
-                    insertion_patterns = [
-                        "\n\n",  # Between paragraphs
-                        ". ",    # After sentences
-                        ":\n",   # After colons (often used before lists)
-                    ]
-                    
-                    for pattern in insertion_patterns:
-                        if pattern in mutated:
-                            # Find the last occurrence of this pattern in first half of text
-                            # (to avoid inserting too late)
-                            midpoint = len(mutated) // 2
-                            first_half = mutated[:midpoint]
-                            last_idx = first_half.rfind(pattern)
-                            
-                            if last_idx != -1:
-                                insert_pos = last_idx + len(pattern)
-                                mutated = mutated[:insert_pos] + mut + " " + mutated[insert_pos:]
-                                print(f"DEBUG: Inserted injection after '{pattern}' at position {insert_pos}")
-                                applied = True
-                                break
-                    
-                    # Strategy 3: Append at the end if no good insertion point found
-                    if not applied:
-                        mutated = mutated.rstrip() + " " + mut
-                        print(f"DEBUG: Appended injection to end")
-                        applied = True
+                    # Otherwise append at the end
+                    mutated = mutated.rstrip() + " " + mut
+                    print(f"DEBUG: Appended injection to end (no insertion point suggested)")
+                    applied = True
                 
                 if applied:
                     changes.append(detail)

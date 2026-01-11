@@ -20,14 +20,17 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [submissionText, setSubmissionText] = useState('');
   const [visibleSegment, setVisibleSegment] = useState<string | null>(null);
+  const [connectionQuality, setConnectionQuality] = useState(100);
+  const [rttMs, setRttMs] = useState<number>(0);
   const [isMuted, setIsMuted] = useState(false);
+  const handshakeStartRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Create WAV header for linear16 PCM audio at 24kHz
-  const createWavHeader = (dataLength: number): Uint8Array => {
+  const createWavHeader = (dataLength: number, sampleRate: number = 24000): Uint8Array => {
     const header = new Uint8Array(44);
     
     // "RIFF" chunk descriptor
@@ -48,11 +51,18 @@ export default function InterviewPage() {
     header[20] = 0x01; header[21] = 0x00; // AudioFormat = 1 (PCM)
     header[22] = 0x01; header[23] = 0x00; // NumChannels = 1 (mono)
     
-    // SampleRate = 24000 (0x5DC0 in little-endian)
-    header[24] = 0xC0; header[25] = 0x5D; header[26] = 0x00; header[27] = 0x00;
+    // SampleRate (little-endian)
+    header[24] = sampleRate & 0xff;
+    header[25] = (sampleRate >> 8) & 0xff;
+    header[26] = (sampleRate >> 16) & 0xff;
+    header[27] = (sampleRate >> 24) & 0xff;
     
-    // ByteRate = 48000 (24000 * 1 * 16/8 = 0xBB80 in little-endian)
-    header[28] = 0x80; header[29] = 0xBB; header[30] = 0x00; header[31] = 0x00;
+    // ByteRate = sampleRate * 1 * 16/8 (little-endian)
+    const byteRate = sampleRate * 2;
+    header[28] = byteRate & 0xff;
+    header[29] = (byteRate >> 8) & 0xff;
+    header[30] = (byteRate >> 16) & 0xff;
+    header[31] = (byteRate >> 24) & 0xff;
     
     header[32] = 0x02; header[33] = 0x00; // BlockAlign = 2
     header[34] = 0x10; header[35] = 0x00; // BitsPerSample = 16
@@ -69,37 +79,62 @@ export default function InterviewPage() {
     return header;
   };
 
+  // Helper: safe byte length for ArrayBuffer/TypedArray/Buffer-like
+  const getByteLength = (x: any): number => {
+    if (!x) return 0;
+    if (x instanceof Uint8Array) return x.byteLength;
+    if (x instanceof ArrayBuffer) return x.byteLength;
+    const maybeLen = (x as any).byteLength ?? (x as any).length;
+    return typeof maybeLen === 'number' ? maybeLen : 0;
+  };
+
   // TTS via Deepgram speak WebSocket (streams text chunks -> audio)
   const speakWithTTS = async (text: string) => {
-    if (!token) return;
+    if (!token) {
+      console.error('[TTS] No token available');
+      alert('No token - cannot play audio');
+      return;
+    }
     try {
+      console.log('[TTS] Starting TTS with text:', text);
       const dg = new DeepgramClient({ accessToken: token });
+      console.log('[TTS] Client created, initiating connection');
+      
       const conn = dg.speak.live({
         model: 'aura-2-orion-en',
         encoding: 'linear16',
-        sample_rate: 24000,
+        sample_rate: 16000,
       });
 
       conn.on('open', () => {
-        conn.sendText(text);
-        conn.flush();
+        console.log('[TTS] Connection opened!');
       });
 
       conn.on('audio', (data: any) => {
-        if (data && data.length > 0) {
-          playAudio(new Uint8Array(data));
+        const size = getByteLength(data);
+        console.log('[TTS] Audio chunk received:', size, 'bytes');
+        if (size > 0) {
+          const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+          playAudio(bytes);
         }
       });
 
       conn.on('error', (err: any) => {
-        console.error('TTS error', err);
+        console.error('[TTS] Connection error:', err);
       });
 
       conn.on('close', () => {
-        /* closed */
+        console.log('[TTS] Connection closed');
       });
+
+      // Send text immediately without waiting
+      console.log('[TTS] Sending text');
+      conn.sendText(text);
+      conn.flush();
+      console.log('[TTS] Text sent');
     } catch (err) {
-      console.error('TTS init failed', err);
+      console.error('[TTS] Init failed:', err);
+      alert('[TTS] Init failed: ' + (err as any)?.message);
     }
   };
 
@@ -114,63 +149,126 @@ export default function InterviewPage() {
 
   // Play audio chunks from the agent
   const playAudio = (audioData: ArrayBuffer | Uint8Array) => {
+    console.log('[Audio] playAudio called with:', audioData instanceof Uint8Array ? audioData.byteLength : (audioData as ArrayBuffer).byteLength, 'bytes');
+    
     if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
+      console.log('[Audio] Creating new AudioContext');
+      try {
+        audioContextRef.current = new AudioContext();
+        console.log('[Audio] AudioContext created, state:', audioContextRef.current.state);
+      } catch (err) {
+        console.error('[Audio] Failed to create AudioContext:', err);
+        alert('[Audio] Cannot create AudioContext: ' + (err as any)?.message);
+        return;
+      }
     }
 
     const ctx = audioContextRef.current;
+    console.log('[Audio] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
+    
+    if (ctx.state === 'suspended') {
+      console.log('[Audio] AudioContext suspended, attempting resume');
+      ctx.resume()
+        .then(() => console.log('[Audio] AudioContext resumed successfully'))
+        .catch(err => console.error('[Audio] Failed to resume context', err));
+    }
+
     let buffer: ArrayBuffer;
     if (audioData instanceof Uint8Array) {
       buffer = audioData.buffer.slice(audioData.byteOffset, audioData.byteOffset + audioData.byteLength) as ArrayBuffer;
     } else {
       buffer = audioData;
     }
+    
+    console.log('[Audio] Pushing to queue, queue length before:', audioQueueRef.current.length);
+    // Cap queue size to avoid uncontrolled growth under poor networks
+    const MAX_QUEUE = 80;
+    if (audioQueueRef.current.length >= MAX_QUEUE) {
+      const drop = audioQueueRef.current.length - MAX_QUEUE + 1;
+      audioQueueRef.current.splice(0, drop);
+      console.warn('[Audio] Queue capped, dropped oldest', drop, 'chunks');
+    }
     audioQueueRef.current.push(buffer);
+    console.log('[Audio] Queue length after:', audioQueueRef.current.length);
 
     // Start playback if not already playing
     if (!isPlayingRef.current) {
+      console.log('[Audio] Starting playback processor');
       processAudioQueue();
+    } else {
+      console.log('[Audio] Already playing, not starting new processor');
     }
   };
 
   const processAudioQueue = async () => {
-    if (!audioContextRef.current) return;
+    console.log('[Playback] Starting queue processor, AudioContext exists:', !!audioContextRef.current);
+    if (!audioContextRef.current) {
+      console.error('[Playback] No AudioContext, aborting');
+      return;
+    }
     
     const ctx = audioContextRef.current;
     isPlayingRef.current = true;
+    console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
 
     while (audioQueueRef.current.length > 0) {
-      const chunk = audioQueueRef.current.shift()!;
+      console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
+      
+      // Use requestIdleCallback to process audio when main thread is idle
+      await new Promise(resolve => {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(() => resolve(null), { timeout: 100 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+
+      // Adaptive buffering based on connection quality
+      const chunksToMerge = [];
+      let totalSize = 0;
+      // Larger adaptive buffer targets to better handle laggy internet
+      // Bytes at 24kHz linear16: bytes = 24000 * 2 * seconds
+      const waitMs = connectionQuality >= 80 ? 30 : connectionQuality >= 50 ? 50 : connectionQuality >= 25 ? 80 : 120;
+      const targetBufferSize = connectionQuality >= 80
+        ? 12000   // ~250ms
+        : connectionQuality >= 50
+        ? 18000   // ~375ms
+        : connectionQuality >= 25
+        ? 24000   // ~500ms
+        : 36000;  // ~750ms
+      
+      if (audioQueueRef.current.length > 0) {
+        const chunk = audioQueueRef.current.shift()!;
+        chunksToMerge.push(chunk);
+        totalSize += chunk.byteLength;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      
+      while (audioQueueRef.current.length > 0 && totalSize < targetBufferSize) {
+        const chunk = audioQueueRef.current.shift()!;
+        chunksToMerge.push(chunk);
+        totalSize += chunk.byteLength;
+      }
+
+      const mergedChunk = new Uint8Array(totalSize);
+      let offset = 0;
+      for (const chunk of chunksToMerge) {
+        mergedChunk.set(new Uint8Array(chunk), offset);
+        offset += chunk.byteLength;
+      }
 
       try {
-        // Manual PCM to Float32 conversion (container='none' sends raw PCM)
-        const int16Array = new Int16Array(chunk);
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 32768.0;
-        }
+        console.log('[Playback] Decoding WAV, size:', mergedChunk.byteLength);
+        const wavHeader = createWavHeader(mergedChunk.byteLength, 16000);
+        const wavFile = new Uint8Array(wavHeader.length + mergedChunk.byteLength);
+        wavFile.set(wavHeader, 0);
+        wavFile.set(mergedChunk, wavHeader.length);
+        
+        console.log('[Playback] Calling decodeAudioData with:', wavFile.length, 'bytes');
+        const audioBuffer = await ctx.decodeAudioData(wavFile.buffer.slice(0));
+        console.log('[Playback] Decode successful, duration:', audioBuffer.duration, 'length:', audioBuffer.length);
 
-        const sourceRate = 24000;
-        const targetRate = ctx.sampleRate || 24000;
-        let data = float32Array;
-        if (sourceRate !== targetRate) {
-          const resampleRatio = targetRate / sourceRate;
-          const newLength = Math.round(float32Array.length * resampleRatio);
-          const resampled = new Float32Array(newLength);
-          for (let i = 0; i < newLength; i++) {
-            const srcIndex = i / resampleRatio;
-            const i0 = Math.floor(srcIndex);
-            const i1 = Math.min(i0 + 1, float32Array.length - 1);
-            const t = srcIndex - i0;
-            resampled[i] = (1 - t) * float32Array[i0] + t * float32Array[i1];
-          }
-          data = resampled;
-        }
-
-        const audioBuffer = ctx.createBuffer(1, data.length, targetRate);
-        audioBuffer.getChannelData(0).set(data);
-
-        // Play with minimal gain ramp
         const source = ctx.createBufferSource();
         currentSourceRef.current = source;
         source.buffer = audioBuffer;
@@ -179,15 +277,21 @@ export default function InterviewPage() {
         gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.003);
 
         source.connect(gain).connect(ctx.destination);
+        console.log('[Playback] Starting source');
         source.start();
+        console.log('[Playback] Source started');
 
         await new Promise(resolve => {
-          source.onended = resolve;
+          source.onended = () => {
+            console.log('[Playback] Source ended');
+            resolve(null);
+          };
         });
       } catch (err) {
-        console.error('Audio decode failed', err);
+        console.error('[Playback] Error:', err);
       }
     }
+    console.log('[Playback] Queue empty, stopping processor');
     isPlayingRef.current = false;
   };
 
@@ -225,26 +329,35 @@ export default function InterviewPage() {
       .catch(() => setError('Failed to get token'));
   }, []);
 
+
+
   // Connect to Deepgram agent
   const connect = () => {
     if (!token) return;
 
+    // Mark handshake start for Deepgram Agent RTT
+    handshakeStartRef.current = performance.now();
     const dgClient = new DeepgramClient({ accessToken: token }).agent();
     setClient(dgClient);
 
     dgClient.once(AgentEvents.Welcome, () => {
+      // Compute RTT to Deepgram welcome
+      const rtt = performance.now() - handshakeStartRef.current;
+      setRttMs(rtt);
+      const q = Math.max(0, Math.min(100, Math.round(100 / (1 + rtt / 150))));
+      setConnectionQuality(q);
       dgClient.configure({
         audio: {
-          input: { encoding: 'linear16', sample_rate: 48000 },
-          output: { encoding: 'linear16', sample_rate: 24000, container: 'none' }
+          input: { encoding: 'linear16', sample_rate: 24000 },
+          output: { encoding: 'linear16', sample_rate: 16000, container: 'none' }
         },
         agent: {
           language: 'en',
           greeting: 'I want to check you understand your assignment. Can you tell me, in your own words, what you wrote?',
           listen: { provider: { type: 'deepgram', version: 'v2', model: 'flux-general-en' } },
-          speak: { provider: { type: 'deepgram', model: 'aura-2-orion-en' } },
+          speak: { provider: { type: 'deepgram', model: 'aura-2-pluto-en' } },
           think: {
-            provider: { type: 'anthropic', model: 'claude-3-5-haiku-20241022' },
+            provider: { type: 'google', model: 'gemini-2.5-flash' },
             functions: [
               {
                 name: 'show_text_segment',
@@ -303,9 +416,18 @@ Use these functions when you need the student to see specific text, then hide it
           }
         }
       });
+      // Keep alive per docs
+      try {
+        setInterval(() => {
+          (dgClient as any).keepAlive?.();
+        }, 5000);
+      } catch (_) {}
     });
 
-    dgClient.once(AgentEvents.SettingsApplied, () => setMicState('open'));
+    dgClient.once(AgentEvents.SettingsApplied, () => {
+      console.log('[SettingsApplied] Agent settings confirmed by server');
+      setMicState('open');
+    });
     
     // Barge-in: if user starts speaking, stop any agent audio playback
     dgClient.on(AgentEvents.UserStartedSpeaking, () => {
@@ -317,19 +439,21 @@ Use these functions when you need the student to see specific text, then hide it
 
     // Handle agent audio output (WAV container -> decode)
     dgClient.on(AgentEvents.Audio, (audioData: any) => {
-      if (audioData && audioData.length > 0) {
-        const buffer = audioData.buffer ? audioData.buffer : audioData;
+      const size = getByteLength(audioData);
+      if (size > 0) {
+        const buffer: ArrayBuffer = audioData?.buffer ? (audioData.buffer as ArrayBuffer) : (audioData as ArrayBuffer);
         playAudio(buffer);
       }
     });
 
     dgClient.on(AgentEvents.ConversationText, (m: any) => {
+      // Batch transcript updates with a small delay to prevent excessive re-renders
       setTranscript((prev) => {
+        // Check if we should merge with the last message
         if (prev.length > 0 && prev[prev.length - 1].role === m.role) {
           const last = prev[prev.length - 1];
           const merged = { role: last.role, content: `${last.content} ${m.content}`.trim() };
-          const next = [...prev.slice(0, -1), merged];
-          return next;
+          return [...prev.slice(0, -1), merged];
         }
         return [...prev, { role: m.role, content: m.content }];
       });
@@ -339,51 +463,63 @@ Use these functions when you need the student to see specific text, then hide it
     dgClient.on(AgentEvents.FunctionCallRequest, (functionCall: any) => {
       console.log('[FunctionCallRequest] Raw payload:', JSON.stringify(functionCall));
       
-      // Extract from functions array if present
-      const fn = functionCall?.functions?.[0] || functionCall;
-      
-      const fnName = fn?.name || fn?.function_name || 'noop';
-      const fnId = fn?.id;
-      const rawArgs = fn?.arguments || fn?.input;
-      
-      let args: any = {};
-      if (rawArgs !== undefined) {
-        try {
-          args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
-        } catch (err) {
-          console.error('FunctionCallRequest parse error', err, rawArgs);
-          args = {};
-        }
-      }
+      const fns = Array.isArray(functionCall?.functions) && functionCall.functions.length > 0
+        ? functionCall.functions
+        : [functionCall];
 
-      let contentResponse = 'ok';
-      if (fnName === 'show_text_segment') {
-        setVisibleSegment(args.segment || null);
-        contentResponse = 'shown';
-      } else if (fnName === 'hide_text_segment') {
-        setVisibleSegment(null);
-        contentResponse = 'hidden';
-      } else if (fnName === 'finish_interview') {
-        saveTranscript();
-        setIsComplete(true);
-        contentResponse = 'finished';
-      } else {
-        contentResponse = 'noop';
-      }
+      for (const fn of fns) {
+        const fnName = fn?.name || fn?.function_name || 'noop';
+        const fnId = fn?.id;
+        const rawArgs = fn?.arguments || fn?.input;
 
-      // Only respond if we have an id
-      if (fnId) {
-        console.log('[FunctionCallResponse] Sending:', { id: fnId, name: fnName, content: contentResponse });
-        try {
-          dgClient.functionCallResponse({ id: fnId, name: fnName, content: contentResponse });
-        } catch (err) {
-          console.error('FunctionCallResponse failed', err);
+        let args: any = {};
+        if (rawArgs !== undefined) {
+          try {
+            args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
+          } catch (err) {
+            console.error('FunctionCallRequest parse error', err, rawArgs);
+            args = {};
+          }
         }
-      } else {
-        console.warn('[FunctionCallRequest] No ID present, skipping response');
+
+        let contentResponse = 'ok';
+        if (fnName === 'show_text_segment') {
+          setVisibleSegment(args.segment || null);
+          contentResponse = 'shown';
+        } else if (fnName === 'hide_text_segment') {
+          setVisibleSegment(null);
+          contentResponse = 'hidden';
+        } else if (fnName === 'finish_interview') {
+          saveTranscript();
+          setIsComplete(true);
+          contentResponse = 'finished';
+        } else {
+          contentResponse = 'noop';
+        }
+
+        if (fnId) {
+          console.log('[FunctionCallResponse] Sending:', { id: fnId, name: fnName, content: contentResponse });
+          try {
+            dgClient.functionCallResponse({ id: fnId, name: fnName, content: contentResponse });
+          } catch (err) {
+            console.error('FunctionCallResponse failed', err);
+          }
+        } else {
+          console.warn('[FunctionCallRequest] No ID present for fn', fnName, 'skipping response');
+        }
       }
     });
   };
+
+  // Cleanup: disconnect agent and close audio context on unmount
+  useEffect(() => {
+    return () => {
+      try { (client as any)?.disconnect?.(); } catch (_) {}
+      try { currentSourceRef.current?.stop?.(); } catch (_) {}
+      audioQueueRef.current = [];
+      try { audioContextRef.current?.close?.(); } catch (_) {}
+    };
+  }, [client]);
 
   // Detect completion
   useEffect(() => {
@@ -414,20 +550,8 @@ Use these functions when you need the student to see specific text, then hide it
   }
 
   return (
+    <>
     <div className="min-h-screen">
-      {/* Popup overlay for visible segment */}
-      {visibleSegment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-xl">
-            <h3 className="text-lg font-semibold text-foreground mb-3">Reference Snippet</h3>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap mb-4">{visibleSegment}</p>
-            <Button onClick={() => setVisibleSegment(null)} variant="outline" className="w-full">
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
-      
       <div className="max-w-5xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8 pb-6">
@@ -445,6 +569,17 @@ Use these functions when you need the student to see specific text, then hide it
             </Button>
           </div>
         </div>
+
+        {/* Prominent Reference Snippet Box (inside container, above transcript) */}
+        {visibleSegment && (
+          <div className="mb-8 border border-border bg-white rounded-lg p-6 shadow-sm">
+            <h3 className="text-base font-semibold text-foreground mb-3">📖 Reference Snippet</h3>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mb-4 max-h-48 overflow-y-auto">{visibleSegment}</p>
+            <Button onClick={() => setVisibleSegment(null)} variant="outline" className="h-9">
+              Dismiss
+            </Button>
+          </div>
+        )}
 
         {/* Main content */}
         {!isComplete ? (
@@ -487,7 +622,7 @@ Use these functions when you need the student to see specific text, then hide it
 
             {/* Transcript */}
             {transcript.length > 0 && (
-              <div className="border border-border bg-white rounded-lg p-6 max-h-96 overflow-y-auto space-y-4 shadow-sm">
+              <div className="border border-border bg-white rounded-lg p-6 max-h-screen overflow-y-auto space-y-4 shadow-sm">
                 {transcript.map((msg, idx) => (
                   <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
                     <div className={`inline-block max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-muted text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
@@ -543,5 +678,21 @@ Use these functions when you need the student to see specific text, then hide it
         )}
       </div>
     </div>
+    {/* Network speed bar at the bottom */}
+    <div className="fixed bottom-0 left-0 right-0 z-40">
+      <div className="max-w-5xl mx-auto px-6 pb-4">
+        <div className="bg-white border border-border rounded-lg shadow-sm p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Network</span>
+            <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
+          </div>
+          <div className="mt-2 h-2 bg-muted rounded">
+            <div className="h-2 rounded bg-primary" style={{ width: `${connectionQuality}%` }} />
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
+        </div>
+      </div>
+    </div>
+    </>
   );
 }

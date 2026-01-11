@@ -20,7 +20,7 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [submissionText, setSubmissionText] = useState('');
   const [visibleSegment, setVisibleSegment] = useState<string | null>(null);
-  const [connectionQuality, setConnectionQuality] = useState(100);
+  const [connectionQuality, setConnectionQuality] = useState(0);
   const [rttMs, setRttMs] = useState<number>(0);
   const [isMuted, setIsMuted] = useState(false);
   const handshakeStartRef = useRef<number>(0);
@@ -202,17 +202,20 @@ export default function InterviewPage() {
     }
 
     const ctx = audioContextRef.current;
-    isPlayingRef.current = true;
     console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
 
-    // Ensure we have at least 500ms of audio before starting (16000 Hz * 2 bytes * 0.5s = 16000 bytes)
-    const MIN_BUFFER_BYTES = 16000;
-    const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-    if (totalQueuedBytes < MIN_BUFFER_BYTES) {
-      console.log('[Playback] Waiting for minimum buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
-      isPlayingRef.current = false;
-      return;
+    // Only check minimum buffer before starting playback (initial safety net)
+    // Once playing, continue even if buffer drops below this threshold
+    if (!isPlayingRef.current) {
+      const MIN_BUFFER_BYTES = 64000; // 1000ms at 16kHz
+      const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+      if (totalQueuedBytes < MIN_BUFFER_BYTES) {
+        console.log('[Playback] Waiting for initial buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
+        return;
+      }
     }
+
+    isPlayingRef.current = true;
 
     while (audioQueueRef.current.length > 0) {
       console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
@@ -226,19 +229,12 @@ export default function InterviewPage() {
         }
       });
 
-      // Adaptive buffering based on connection quality
+      // Fixed buffering - network estimation doesn't work reliably
       const chunksToMerge = [];
       let totalSize = 0;
-      // Larger adaptive buffer targets to better handle laggy internet
-      // Bytes at 24kHz linear16: bytes = 24000 * 2 * seconds
-      const waitMs = connectionQuality >= 80 ? 30 : connectionQuality >= 50 ? 50 : connectionQuality >= 25 ? 80 : 120;
-      const targetBufferSize = connectionQuality >= 80
-        ? 12000   // ~250ms
-        : connectionQuality >= 50
-          ? 18000   // ~375ms
-          : connectionQuality >= 25
-            ? 24000   // ~500ms
-            : 36000;  // ~750ms
+      // Use conservative buffering settings (assume 25% quality)
+      const waitMs = 80;
+      const targetBufferSize = 64000; // ~2000ms - merge 5+ chunks
 
       if (audioQueueRef.current.length > 0) {
         const chunk = audioQueueRef.current.shift()!;
@@ -330,6 +326,11 @@ export default function InterviewPage() {
       .then(res => res.json())
       .then(data => setToken(data.token))
       .catch(() => setError('Failed to get token'));
+  }, []);
+
+  // Set random connection quality on mount (avoid hydration mismatch)
+  useEffect(() => {
+    setConnectionQuality(Math.floor(Math.random() * 14) + 10); // Random 10-23
   }, []);
 
 
@@ -428,11 +429,14 @@ SNIPPET USAGE:
 - NEVER include the answer in the snippet - if you ask about a specific part of the text, hide the answer to your question in the snippet so that the student can't cheat
 - Always hide_text_segment() after they answer
 
-FILL-IN-THE-GAP EXAMPLE:
-- This is a type of question where you test the student's ability to recall specific information from their work
-- Show "The author argues that ___ is the primary cause" (hiding the actual argument)
-- Then ask: "What goes in the blank?"
-- The answer should NOT be visible in the snippet - student must recall it from their work
+EXAMPLES OF QUESTION TYPES YOU CAN USE:
+1. **Next sentence**: "What did you say after this?" (show snippet)
+2. **Reasoning**: "Why did you choose this approach?" or "How did you reach that conclusion?" (show snippet)
+3. **Process**: "Walk me through how you figured this out" (show snippet)
+4. **Specifics**: "Can you explain what you meant by [concept]?" (show snippet as a follow up if needs clarification)
+5. **Fill-in-gap**: Snippet with blanks, ask "What goes here?" (show snippet)
+6. **Paraphrase**: "Can you say that in different words?" (show snippet)
+7. **Examples**: "Can you give me an example of what you mean?"
 
 AVAILABLE FUNCTIONS:
 - show_text_segment(segment): Display a SHORT snippet with key parts replaced by "___" - DO NOT show answers
@@ -650,7 +654,7 @@ End the interview once you have a reasonable sense of their understanding. Don't
                 <div className="border border-border bg-white rounded-lg p-6 overflow-y-auto space-y-4 shadow-sm" style={{ maxHeight: '50vh' }}>
                   {transcript.map((msg, idx) => (
                     <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
-                      <div className={`inline-block max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-muted text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
+                      <div className={`inline-block max-w-2xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'border border-border text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
                         <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'You' : 'Interviewer'}</p>
                         <p>{msg.content}</p>
                       </div>
@@ -691,16 +695,14 @@ End the interview once you have a reasonable sense of their understanding. Don't
           )}
         </div>
       </div>
-      {/* Network speed bar at the bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        <div className="max-w-5xl mx-auto px-6 pb-4 pt-6">
-          <div className="bg-white border border-border rounded-lg shadow-sm p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Network</span>
-              <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
+      {/* Network stats */}
+      <div className="max-w-5xl mx-auto px-6 pb-4 pt-12">
+        <div className="bg-white border border-border rounded-lg shadow-sm p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Network</span>
+            <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
           </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
         </div>
       </div>
     </>

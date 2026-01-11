@@ -150,13 +150,13 @@ export default function InterviewPage() {
 
   // Play audio chunks from the agent
   const playAudio = (audioData: ArrayBuffer | Uint8Array) => {
-    console.log('[Audio] playAudio called with:', audioData instanceof Uint8Array ? audioData.byteLength : (audioData as ArrayBuffer).byteLength, 'bytes');
+    // console.log('[Audio] playAudio called with:', audioData instanceof Uint8Array ? audioData.byteLength : (audioData as ArrayBuffer).byteLength, 'bytes');
 
     if (!audioContextRef.current) {
-      console.log('[Audio] Creating new AudioContext');
+      // console.log('[Audio] Creating new AudioContext');
       try {
         audioContextRef.current = new AudioContext();
-        console.log('[Audio] AudioContext created, state:', audioContextRef.current.state);
+        // console.log('[Audio] AudioContext created, state:', audioContextRef.current.state);
       } catch (err) {
         console.error('[Audio] Failed to create AudioContext:', err);
         alert('[Audio] Cannot create AudioContext: ' + (err as any)?.message);
@@ -165,10 +165,10 @@ export default function InterviewPage() {
     }
 
     const ctx = audioContextRef.current;
-    console.log('[Audio] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
+    // console.log('[Audio] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
 
     if (ctx.state === 'suspended') {
-      console.log('[Audio] AudioContext suspended, attempting resume');
+      // console.log('[Audio] AudioContext suspended, attempting resume');
       ctx.resume()
         .then(() => console.log('[Audio] AudioContext resumed successfully'))
         .catch(err => console.error('[Audio] Failed to resume context', err));
@@ -181,28 +181,28 @@ export default function InterviewPage() {
       buffer = audioData;
     }
 
-    console.log('[Audio] Pushing to queue, queue length before:', audioQueueRef.current.length);
+    // console.log('[Audio] Pushing to queue, queue length before:', audioQueueRef.current.length);
     audioQueueRef.current.push(buffer);
-    console.log('[Audio] Queue length after:', audioQueueRef.current.length);
+    // console.log('[Audio] Queue length after:', audioQueueRef.current.length);
 
     // Start playback if not already playing
     if (!isPlayingRef.current) {
-      console.log('[Audio] Starting playback processor');
+    //   console.log('[Audio] Starting playback processor');
       processAudioQueue();
     } else {
-      console.log('[Audio] Already playing, not starting new processor');
+    //   console.log('[Audio] Already playing, not starting new processor');
     }
   };
 
   const processAudioQueue = async () => {
-    console.log('[Playback] Starting queue processor, AudioContext exists:', !!audioContextRef.current);
+    // console.log('[Playback] Starting queue processor, AudioContext exists:', !!audioContextRef.current);
     if (!audioContextRef.current) {
       console.error('[Playback] No AudioContext, aborting');
       return;
     }
 
     const ctx = audioContextRef.current;
-    console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
+    // console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
 
     // Only check minimum buffer before starting playback (initial safety net)
     // Once playing, continue even if buffer drops below this threshold
@@ -210,7 +210,7 @@ export default function InterviewPage() {
       const MIN_BUFFER_BYTES = 64000; // 1000ms at 16kHz
       const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
       if (totalQueuedBytes < MIN_BUFFER_BYTES) {
-        console.log('[Playback] Waiting for initial buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
+        // console.log('[Playback] Waiting for initial buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
         return;
       }
     }
@@ -218,7 +218,7 @@ export default function InterviewPage() {
     isPlayingRef.current = true;
 
     while (audioQueueRef.current.length > 0) {
-      console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
+      // console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
 
       // Use requestIdleCallback to process audio when main thread is idle
       await new Promise(resolve => {
@@ -258,15 +258,15 @@ export default function InterviewPage() {
       }
 
       try {
-        console.log('[Playback] Decoding WAV, size:', mergedChunk.byteLength);
+        // console.log('[Playback] Decoding WAV, size:', mergedChunk.byteLength);
         const wavHeader = createWavHeader(mergedChunk.byteLength, 16000);
         const wavFile = new Uint8Array(wavHeader.length + mergedChunk.byteLength);
         wavFile.set(wavHeader, 0);
         wavFile.set(mergedChunk, wavHeader.length);
 
-        console.log('[Playback] Calling decodeAudioData with:', wavFile.length, 'bytes');
+        // console.log('[Playback] Calling decodeAudioData with:', wavFile.length, 'bytes');
         const audioBuffer = await ctx.decodeAudioData(wavFile.buffer.slice(0));
-        console.log('[Playback] Decode successful, duration:', audioBuffer.duration, 'length:', audioBuffer.length);
+        // console.log('[Playback] Decode successful, duration:', audioBuffer.duration, 'length:', audioBuffer.length);
 
         const source = ctx.createBufferSource();
         currentSourceRef.current = source;
@@ -276,13 +276,13 @@ export default function InterviewPage() {
         gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.003);
 
         source.connect(gain).connect(ctx.destination);
-        console.log('[Playback] Starting source');
+        // console.log('[Playback] Starting source');
         source.start();
-        console.log('[Playback] Source started');
+        // console.log('[Playback] Source started');
 
         await new Promise(resolve => {
           source.onended = () => {
-            console.log('[Playback] Source ended');
+            // console.log('[Playback] Source ended');
             resolve(null);
           };
         });
@@ -290,7 +290,7 @@ export default function InterviewPage() {
         console.error('[Playback] Error:', err);
       }
     }
-    console.log('[Playback] Queue empty, stopping processor');
+    // console.log('[Playback] Queue empty, stopping processor');
     isPlayingRef.current = false;
   };
 
@@ -330,7 +330,7 @@ export default function InterviewPage() {
 
   // Set random connection quality on mount (avoid hydration mismatch)
   useEffect(() => {
-    setConnectionQuality(Math.floor(Math.random() * 14) + 10); // Random 10-23
+    setConnectionQuality(Math.floor(Math.random() * 14) + 5); // Random 5-18
   }, []);
 
 
@@ -479,6 +479,7 @@ End the interview once you have a reasonable sense of their understanding. Don't
 
     dgClient.on(AgentEvents.ConversationText, (m: any) => {
       setTranscript((prev) => [...prev, { role: m.role, content: m.content }]);
+      console.log('[ConversationText] Raw payload:', JSON.stringify(m));
     });
 
     // Handle function calls from the LLM (guarded parsing so we never throw)

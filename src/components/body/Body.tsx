@@ -26,7 +26,7 @@ export const Body = () => {
 
   // Agent configuration
   const [listenModel, setListenModel] = useState<ListenModel>(
-    ListenModel.General,
+    ListenModel.Flux,
   );
   const [thinkModel, setThinkModel] = useState<ThinkModel>(ThinkModel.Claude);
   const [speechModel, setSpeechModel] = useState<SpeechModel>(
@@ -385,6 +385,7 @@ export const Body = () => {
                     setListenModel(e.target.value as ListenModel)
                   }
                 >
+                  <option value={ListenModel.Flux}>Flux</option>
                   <option value={ListenModel.General}>General Purpose</option>
                   <option value={ListenModel.Medical}>Medical</option>
                 </select>

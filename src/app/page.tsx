@@ -2,6 +2,7 @@
 
 import { GetStartedButton } from "@/components/GetStartedButton";
 import { RotatingText } from "@/components/RotatingText";
+import { WorkflowDiagram } from "@/components/workflow/WorkflowDiagram";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -275,6 +276,21 @@ export default function Home() {
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-6">
             <GetStartedButton className="h-12 bg-primary px-8 text-base font-semibold text-primary-foreground hover:bg-primary/90" />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-border bg-white px-6 py-16">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-8 text-center">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary">How it works</p>
+            <h2 className="mb-4 text-3xl font-bold text-foreground">Complete System Workflow</h2>
+            <p className="mx-auto max-w-2xl text-muted-foreground">
+              Interactive diagram showing how the AI detection system works from assignment creation to flagging
+            </p>
+          </div>
+          <div className="mt-8">
+            <WorkflowDiagram />
           </div>
         </div>
       </section>

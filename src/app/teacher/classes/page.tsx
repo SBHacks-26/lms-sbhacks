@@ -60,7 +60,7 @@ export default function TeacherClasses() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold leading-tight">Your Classes</h1>
-          <p className="text-sm text-muted-foreground">Manage your courses and assignments, all in one place.</p>
+          <p className="text-sm text-muted-foreground">Manage all your courses and assignments here.</p>
         </div>
       </div>
 
@@ -87,7 +87,7 @@ export default function TeacherClasses() {
 
         {courses.length === 0 && (
           <div className="col-span-full border border-dashed border-border bg-card px-6 py-12 text-center">
-            <p className="text-sm text-muted-foreground">No classes yet. Sample data will appear here soon.</p>
+            <p className="text-sm text-muted-foreground">No classes yet. They'll appear here once you're enrolled.</p>
           </div>
         )}
       </div>

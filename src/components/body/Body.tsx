@@ -356,9 +356,9 @@ export const Body = () => {
       <Mic state={micState} client={client} onError={setError} />
 
       {!token && (
-        <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+        <div className="shadow p-6 bg-white dark:bg-gray-900">
           <h2 className="text-xl font-bold mb-2">Start a quick voice check</h2>
-          <p className="text-blue-600 bg-blue-100 border border-blue-300 p-2 rounded mb-4">
+          <p className="text-blue-600 bg-blue-100 border border-blue-300 p-2 mb-4">
             Get a token to open the line; then you can speak and listen right away.
           </p>
           <Button
@@ -371,7 +371,7 @@ export const Body = () => {
       )}
 
       {token && !connected && (
-        <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+        <div className="shadow p-6 bg-white dark:bg-gray-900">
           <h2 className="text-xl font-bold mb-2">Voice settings</h2>
           <form className="space-y-4">
             <div>
@@ -440,14 +440,13 @@ export const Body = () => {
 
       {connected && (
         <>
-          <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+          <div className="shadow p-6 bg-white dark:bg-gray-900">
             <h2 className="text-xl font-bold mb-2">Voice channel ready</h2>
             <div
-              className={`${
-                isAgentSpeaking
-                  ? "text-blue-700 bg-blue-200 border border-blue-400 p-2 rounded"
-                  : "text-green-700 bg-green-200 border border-green-400 p-2 rounded"
-              }`}
+              className={`${isAgentSpeaking
+                ? "text-blue-700 bg-blue-200 border border-blue-400 p-2 rounded"
+                : "text-green-700 bg-green-200 border border-green-400 p-2 rounded"
+                }`}
             >
               {isAgentSpeaking
                 ? "🔊 Speaking now, please listen"
@@ -461,10 +460,10 @@ export const Body = () => {
             </button>
           </div>
 
-          <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
+          <div className="shadow p-6 bg-white dark:bg-gray-900">
             <h2 className="text-xl font-bold mb-2">Conversation log</h2>
             <div
-              className="rounded-lg shadow p-4 bg-gray-50 dark:bg-gray-800"
+              className="shadow p-4 bg-gray-50 dark:bg-gray-800"
               style={{
                 maxHeight: "300px",
                 overflowY: "auto",
@@ -480,7 +479,7 @@ export const Body = () => {
                 transcript.map((message, index) => (
                   <div
                     key={index}
-                    className="rounded-lg shadow p-2 mb-3"
+                    className="shadow p-2 mb-3"
                     style={{
                       backgroundColor:
                         message.role === "user"

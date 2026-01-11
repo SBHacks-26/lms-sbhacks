@@ -25,7 +25,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "GradeMeIn",
-  description: "A calm, audit-friendly LMS for modern classrooms",
+  description: "Help catch issues in student work early",
 };
 
 export const viewport: Viewport = {
@@ -49,7 +49,7 @@ export default function RootLayout({
               </span>
               <div className="leading-tight">
                 <div>GradeMeIn</div>
-                <div className="text-xs font-normal text-muted-foreground">Keep coursework honest</div>
+                <div className="text-xs font-normal text-muted-foreground">Teach with confidence. Grade with trust.</div>
               </div>
             </Link>
             <div className="flex items-center gap-2">

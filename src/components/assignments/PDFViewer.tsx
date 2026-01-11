@@ -10,7 +10,7 @@ export function PDFViewer({ pdfBase64 }: PDFViewerProps) {
   return (
     <iframe
       src={`data:application/pdf;base64,${pdfBase64}`}
-      className="w-full h-[600px] border rounded"
+      className="w-full h-[600px] border border-border"
       title="Assignment PDF"
     />
   );

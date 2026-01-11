@@ -7,19 +7,26 @@ import {
   SignedOut,
   UserButton,
 } from "@clerk/nextjs";
-import { Noto_Sans } from "next/font/google";
+import Link from "next/link";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-const notoSans = Noto_Sans({
+const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
+  weight: ["100", "200", "300", "400", "500", "600", "700"],
   style: ["normal", "italic"],
   display: "swap",
 });
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-plex-mono",
+});
 
 export const metadata: Metadata = {
-  title: "Next.js Voice Agent - Deepgram",
-  description:
-    "Real-time voice agent powered by Deepgram's speech-to-text and text-to-speech technology",
+  title: "GradeMeIn",
+  description: "A calm, audit-friendly LMS for modern classrooms",
 };
 
 export const viewport: Viewport = {
@@ -35,19 +42,34 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className={`w-screen h-screen ${notoSans.className}`}>
-          <header className="flex justify-end items-center p-4 gap-4 h-16">
-            <SignedOut>
-              <SignInButton />
-              <SignUpButton>
-                <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                  Sign Up
-                </button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
-              <UserButton />
-            </SignedIn>
+        <body className={`w-screen h-screen ${plexSans.className} ${plexMono.variable}`}>
+          <header className="flex items-center justify-between h-16 px-6 border-b border-border bg-white">
+            <Link href="/" className="flex items-center gap-3 font-semibold text-lg text-foreground">
+              <span className="flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground font-bold tracking-wide">
+                GM
+              </span>
+              <div className="leading-tight">
+                <div>GradeMeIn</div>
+                <div className="text-xs font-normal text-muted-foreground">Keep coursework honest</div>
+              </div>
+            </Link>
+            <div className="flex items-center gap-2">
+              <SignedOut>
+                <SignInButton>
+                  <button className="h-10 border border-border px-4 text-sm font-semibold text-foreground bg-white transition hover:bg-accent hover:text-accent-foreground">
+                    Sign In
+                  </button>
+                </SignInButton>
+                <SignUpButton>
+                  <button className="h-10 bg-secondary px-4 text-sm font-semibold text-secondary-foreground transition hover:bg-primary">
+                    Create Account
+                  </button>
+                </SignUpButton>
+              </SignedOut>
+              <SignedIn>
+                <UserButton />
+              </SignedIn>
+            </div>
           </header>
           {children}
         </body>

@@ -37,20 +37,21 @@ export default function AssignmentView() {
       });
   }, [params.id, user]);
 
-  if (loading) return <div className="p-6">Loading...</div>;
-  if (!assignment) return <div className="p-6">Assignment not found</div>;
+  if (loading) return <div className="p-6">Loading, one moment...</div>;
+  if (!assignment) return <div className="p-6">Assignment not found, please check the link.</div>;
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">{assignment.title}</h1>
+    <div className="mx-auto max-w-5xl p-6">
+      <h1 className="mb-4 text-2xl font-bold">{assignment.title}</h1>
 
       <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-2">Assignment PDF</h2>
+        <h2 className="mb-2 text-lg font-semibold">Assignment PDF</h2>
         <PDFViewer pdfBase64={pdfBase64} />
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-2">Submit Your Response</h2>
+        <h2 className="mb-2 text-lg font-semibold">Submit your response</h2>
+        <p className="mb-3 text-sm text-muted-foreground">Share your own work, keep it clear and on time.</p>
         <SubmissionForm
           assignmentId={params.id as string}
           studentId={user?.id || ''}

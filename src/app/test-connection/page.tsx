@@ -29,42 +29,42 @@ export default function TestConnectionPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
-      <h1 className="text-3xl font-bold mb-6">API Connection Test</h1>
+    <div className="mx-auto max-w-2xl p-6">
+      <h1 className="mb-6 text-3xl font-bold">API connection check</h1>
 
       <button
         onClick={testConnection}
         disabled={loading}
-        className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 disabled:opacity-50"
+        className="bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
-        {loading ? 'Testing...' : 'Test Connection'}
+        {loading ? 'Testing, please wait...' : 'Test connection now'}
       </button>
 
       {status && (
-        <div className="mt-6 p-4 bg-green-100 border border-green-400 rounded">
-          <h2 className="font-bold text-green-800 mb-2">✓ Connection Successful</h2>
-          <pre className="text-sm overflow-auto">
+        <div className="mt-6 border border-border bg-secondary/10 p-4">
+          <h2 className="mb-2 font-bold text-foreground">✓ Connection works</h2>
+          <pre className="overflow-auto text-sm">
             {JSON.stringify(status, null, 2)}
           </pre>
         </div>
       )}
 
       {error && (
-        <div className="mt-6 p-4 bg-red-100 border border-red-400 rounded">
-          <h2 className="font-bold text-red-800 mb-2">✗ Connection Failed</h2>
-          <pre className="text-sm overflow-auto text-red-700">
+        <div className="mt-6 border border-border bg-destructive/10 p-4">
+          <h2 className="mb-2 font-bold text-destructive">✗ Connection failed</h2>
+          <pre className="overflow-auto text-sm text-destructive">
             {error}
           </pre>
         </div>
       )}
 
-      <div className="mt-8 p-4 bg-gray-100 rounded">
-        <h3 className="font-semibold mb-2">What this tests:</h3>
-        <ul className="list-disc list-inside space-y-1 text-sm">
+      <div className="mt-8 border border-border bg-card p-4">
+        <h3 className="mb-2 font-semibold">What this checks</h3>
+        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
           <li>Next.js server is running</li>
-          <li>Flask API is running on port 5000</li>
-          <li>CORS is properly configured</li>
-          <li>Environment variables are set correctly</li>
+          <li>Flask API runs on port 5000</li>
+          <li>CORS is set up correctly</li>
+          <li>Environment variables are present</li>
           <li>Network connectivity between services</li>
         </ul>
       </div>

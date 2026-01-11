@@ -176,7 +176,7 @@ export const Body = () => {
         },
         agent: {
           greeting:
-            "Welcome to the Next.js Voice Agent Demo. How can I assist you today?",
+            "Hi, let's go over your work. Tell me what you need and I will answer simply.",
           listen: {
             provider: {
               type: "deepgram",
@@ -357,23 +357,22 @@ export const Body = () => {
 
       {!token && (
         <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
-          <h2 className="text-xl font-bold mb-2">Welcome</h2>
+          <h2 className="text-xl font-bold mb-2">Start a quick voice check</h2>
           <p className="text-blue-600 bg-blue-100 border border-blue-300 p-2 rounded mb-4">
-            Click the button below to authenticate with Deepgram and start your
-            voice conversation.
+            Get a token to open the line; then you can speak and listen right away.
           </p>
           <Button
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-lg"
             onClick={authenticate}
           >
-            🔐 Authenticate with Deepgram
+            🔐 Get token
           </Button>
         </div>
       )}
 
       {token && !connected && (
         <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
-          <h2 className="text-xl font-bold mb-2">Agent Configuration</h2>
+          <h2 className="text-xl font-bold mb-2">Voice settings</h2>
           <form className="space-y-4">
             <div>
               <label className="flex flex-col gap-1">
@@ -431,7 +430,7 @@ export const Body = () => {
                 type="button"
                 onClick={connect}
               >
-                🚀 Connect to Agent
+                🚀 Connect and start
               </button>
             </div>
           </form>
@@ -441,7 +440,7 @@ export const Body = () => {
       {connected && (
         <>
           <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
-            <h2 className="text-xl font-bold mb-2">Voice Agent Connected</h2>
+            <h2 className="text-xl font-bold mb-2">Voice channel ready</h2>
             <div
               className={`${
                 isAgentSpeaking
@@ -450,8 +449,8 @@ export const Body = () => {
               }`}
             >
               {isAgentSpeaking
-                ? "🔊 Agent is speaking..."
-                : "✅ Ready for conversation"}
+                ? "🔊 Speaking now, please listen"
+                : "✅ Ready to talk"}
             </div>
             <button
               className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 mt-4"
@@ -462,7 +461,7 @@ export const Body = () => {
           </div>
 
           <div className="rounded-lg shadow p-6 bg-white dark:bg-gray-900">
-            <h2 className="text-xl font-bold mb-2">Conversation Transcript</h2>
+            <h2 className="text-xl font-bold mb-2">Conversation log</h2>
             <div
               className="rounded-lg shadow p-4 bg-gray-50 dark:bg-gray-800"
               style={{
@@ -474,7 +473,7 @@ export const Body = () => {
             >
               {transcript.length === 0 ? (
                 <div className="text-blue-600 bg-blue-100 border border-blue-300 p-2 rounded">
-                  <em>Conversation will appear here...</em>
+                  <em>The conversation will appear here, wait a bit.</em>
                 </div>
               ) : (
                 transcript.map((message, index) => (

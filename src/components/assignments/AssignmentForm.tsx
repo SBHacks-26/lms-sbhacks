@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface AssignmentFormProps {
   teacherId: string;
@@ -31,7 +32,7 @@ export function AssignmentForm({ teacherId, onSuccess }: AssignmentFormProps) {
 
       if (response.ok) {
         console.log('Assignment created:', data.assignmentId);
-        setMessage('✓ Assignment created successfully!');
+        setMessage('✓ Assignment created, nice and simple.');
         setTitle('');
         setContent('');
         onSuccess?.();
@@ -45,49 +46,49 @@ export function AssignmentForm({ teacherId, onSuccess }: AssignmentFormProps) {
       }
     } catch (error) {
       console.error('Network error:', error);
-      setMessage('Network error: ' + error + '\n\nMake sure both Next.js and Flask servers are running.');
+      setMessage('Network error: ' + error + '\n\nMake sure both servers are running, please.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 text-foreground">
       <div>
-        <label className="block mb-2 font-medium">Assignment Title</label>
+        <label className="mb-2 block text-sm font-semibold">Assignment Title</label>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
-          className="w-full p-2 border rounded"
-          placeholder="Essay on Climate Change"
+          className="w-full border border-border bg-white px-3 py-2 text-sm"
+          placeholder="Essay on climate change"
         />
       </div>
 
       <div>
-        <label className="block mb-2 font-medium">Assignment Content</label>
+        <label className="mb-2 block text-sm font-semibold">Assignment Content</label>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           required
           rows={8}
-          className="w-full p-2 border rounded"
-          placeholder="Write a 500 word essay about..."
+          className="w-full border border-border bg-white px-3 py-2 text-sm"
+          placeholder="Write a short prompt students will follow..."
         />
       </div>
 
-      <button
+      <Button
         type="submit"
         disabled={loading}
-        className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+        className="h-10 bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
       >
         {loading ? 'Creating...' : 'Create Assignment'}
-      </button>
+      </Button>
 
       {message && (
-        <div className={`p-3 rounded ${message.includes('Error') || message.includes('error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-          <pre className="whitespace-pre-wrap text-sm font-sans">{message}</pre>
+        <div className={`border border-border px-3 py-2 text-sm ${message.includes('Error') || message.includes('error') ? 'bg-destructive/10 text-destructive' : 'bg-secondary/10 text-secondary-foreground'}`}>
+          <pre className="whitespace-pre-wrap font-sans">{message}</pre>
         </div>
       )}
     </form>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { InterviewModal } from '@/components/interviews/InterviewModal';
+import { Button } from '@/components/ui/button';
 
 interface SubmissionFormProps {
   assignmentId: string;
@@ -40,34 +41,34 @@ export function SubmissionForm({ assignmentId, studentId }: SubmissionFormProps)
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 text-foreground">
         <textarea
           value={submissionText}
           onChange={(e) => setSubmissionText(e.target.value)}
           required
           rows={12}
-          className="w-full p-4 border rounded"
+          className="w-full border border-border bg-white px-3 py-3 text-sm"
           placeholder="Type your response here..."
         />
 
-        <button
+        <Button
           type="submit"
           disabled={loading}
-          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          className="h-10 bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
         >
           {loading ? 'Submitting...' : 'Submit'}
-        </button>
+        </Button>
       </form>
 
       {result && !showInterview && (
-        <div className={`mt-4 p-4 rounded ${
-          result.needsInterview ? 'bg-yellow-100' : 'bg-green-100'
+        <div className={`mt-4 border border-border px-4 py-3 text-sm ${
+          result.needsInterview ? 'bg-accent/10 text-accent-foreground' : 'bg-secondary/10 text-secondary-foreground'
         }`}>
           <p className="font-semibold">
-            Submitted successfully! Cheating score: {(result.cheatingScore * 100).toFixed(0)}%
+            Submitted, thanks. Honesty check: {(result.cheatingScore * 100).toFixed(0)}%
           </p>
           {result.needsInterview && (
-            <p className="text-sm mt-2">Please complete the interview verification.</p>
+            <p className="mt-2 text-xs">Please complete the quick follow up so we can confirm it is your work.</p>
           )}
         </div>
       )}

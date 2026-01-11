@@ -38,21 +38,21 @@ export function InterviewModal({ assignmentId, submissionId, onClose }: Intervie
           output: { encoding: 'linear16', sample_rate: 24000, container: 'none' }
         },
         agent: {
-          greeting: "I need to verify your understanding of the assignment. Can you summarize what you wrote in your own words?",
+          greeting: "I want to check you understand your assignment. Can you tell me, in your own words, what you wrote?",
           listen: { provider: { type: 'deepgram', model: 'flux-general-en' } },
           speak: { provider: { type: 'deepgram', model: 'aura-2-thalia-en' } },
           think: {
             provider: { type: 'anthropic', model: 'claude-3-5-haiku-20241022' },
-            prompt: `You are verifying a student understood their assignment submission.
-Their submission was flagged for potential AI assistance.
+            prompt: `You check if a student understands their own submission.
+The work looked suspicious, so we ask a few quick questions to confirm.
 
-Ask 3 quick questions:
+Ask 3 short questions:
 1. "Can you summarize what you wrote in your own words?"
 2. "What was the main point you were trying to make?"
 3. "Can you explain a specific concept from your submission?"
 
-Be conversational, not interrogative. After 3 questions, say:
-"Thanks! Your response has been recorded."
+Stay conversational, not stiff. After 3 questions, say:
+"Thanks, your response has been recorded."
 
 Then output: VERDICT: LIKELY_CHEATED | UNCLEAR | LEGITIMATE`
           }
@@ -88,22 +88,22 @@ Then output: VERDICT: LIKELY_CHEATED | UNCLEAR | LEGITIMATE`
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">Interview Verification</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto bg-white p-6">
+        <h2 className="mb-4 text-2xl font-bold">Interview check</h2>
 
         {!isComplete ? (
           <>
             <p className="mb-4 text-gray-700">
-              Please verify your understanding by answering a few questions about your submission.
+              Answer a few quick questions so we confirm the work is yours, this matters.
             </p>
 
             {!client && token && (
               <button
                 onClick={connect}
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+                className="bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
               >
-                Start Interview
+                Start interview
               </button>
             )}
 
@@ -111,7 +111,7 @@ Then output: VERDICT: LIKELY_CHEATED | UNCLEAR | LEGITIMATE`
               <>
                 <Mic state={micState} client={client} onError={() => {}} />
 
-                <div className="mt-4 border rounded p-4 max-h-64 overflow-y-auto">
+                <div className="mt-4 max-h-64 overflow-y-auto border border-border p-4">
                   {transcript.map((msg, i) => (
                     <div key={i} className={`mb-3 ${msg.role === 'user' ? 'text-blue-700' : 'text-gray-800'}`}>
                       <strong>{msg.role === 'user' ? 'You' : 'Interviewer'}:</strong> {msg.content}
@@ -123,10 +123,10 @@ Then output: VERDICT: LIKELY_CHEATED | UNCLEAR | LEGITIMATE`
           </>
         ) : (
           <div>
-            <p className="text-green-700 mb-4">✓ Interview complete. Your response has been recorded.</p>
+            <p className="mb-4 text-green-700">✓ Interview complete. Your response is saved.</p>
             <button
               onClick={onClose}
-              className="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700"
+              className="bg-secondary px-6 py-2 text-sm font-semibold text-secondary-foreground hover:bg-primary"
             >
               Close
             </button>

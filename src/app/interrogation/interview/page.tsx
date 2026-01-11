@@ -21,7 +21,7 @@ export default function InterviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [submissionText, setSubmissionText] = useState('');
   const [visibleSegment, setVisibleSegment] = useState<string | null>(null);
-  const [connectionQuality, setConnectionQuality] = useState(100);
+  const [connectionQuality, setConnectionQuality] = useState(0);
   const [rttMs, setRttMs] = useState<number>(0);
   const [isMuted, setIsMuted] = useState(false);
   const handshakeStartRef = useRef<number>(0);
@@ -151,13 +151,13 @@ export default function InterviewPage() {
 
   // Play audio chunks from the agent
   const playAudio = (audioData: ArrayBuffer | Uint8Array) => {
-    console.log('[Audio] playAudio called with:', audioData instanceof Uint8Array ? audioData.byteLength : (audioData as ArrayBuffer).byteLength, 'bytes');
+    // console.log('[Audio] playAudio called with:', audioData instanceof Uint8Array ? audioData.byteLength : (audioData as ArrayBuffer).byteLength, 'bytes');
 
     if (!audioContextRef.current) {
-      console.log('[Audio] Creating new AudioContext');
+      // console.log('[Audio] Creating new AudioContext');
       try {
         audioContextRef.current = new AudioContext();
-        console.log('[Audio] AudioContext created, state:', audioContextRef.current.state);
+        // console.log('[Audio] AudioContext created, state:', audioContextRef.current.state);
       } catch (err) {
         console.error('[Audio] Failed to create AudioContext:', err);
         alert('[Audio] Cannot create AudioContext: ' + (err as any)?.message);
@@ -166,10 +166,10 @@ export default function InterviewPage() {
     }
 
     const ctx = audioContextRef.current;
-    console.log('[Audio] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
+    // console.log('[Audio] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
 
     if (ctx.state === 'suspended') {
-      console.log('[Audio] AudioContext suspended, attempting resume');
+      // console.log('[Audio] AudioContext suspended, attempting resume');
       ctx.resume()
         .then(() => console.log('[Audio] AudioContext resumed successfully'))
         .catch(err => console.error('[Audio] Failed to resume context', err));
@@ -182,41 +182,44 @@ export default function InterviewPage() {
       buffer = audioData;
     }
 
-    console.log('[Audio] Pushing to queue, queue length before:', audioQueueRef.current.length);
+    // console.log('[Audio] Pushing to queue, queue length before:', audioQueueRef.current.length);
     audioQueueRef.current.push(buffer);
-    console.log('[Audio] Queue length after:', audioQueueRef.current.length);
+    // console.log('[Audio] Queue length after:', audioQueueRef.current.length);
 
     // Start playback if not already playing
     if (!isPlayingRef.current) {
-      console.log('[Audio] Starting playback processor');
+    //   console.log('[Audio] Starting playback processor');
       processAudioQueue();
     } else {
-      console.log('[Audio] Already playing, not starting new processor');
+    //   console.log('[Audio] Already playing, not starting new processor');
     }
   };
 
   const processAudioQueue = async () => {
-    console.log('[Playback] Starting queue processor, AudioContext exists:', !!audioContextRef.current);
+    // console.log('[Playback] Starting queue processor, AudioContext exists:', !!audioContextRef.current);
     if (!audioContextRef.current) {
       console.error('[Playback] No AudioContext, aborting');
       return;
     }
 
     const ctx = audioContextRef.current;
-    isPlayingRef.current = true;
-    console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
+    // console.log('[Playback] Processor running, queue length:', audioQueueRef.current.length);
 
-    // Ensure we have at least 500ms of audio before starting (16000 Hz * 2 bytes * 0.5s = 16000 bytes)
-    const MIN_BUFFER_BYTES = 16000;
-    const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-    if (totalQueuedBytes < MIN_BUFFER_BYTES) {
-      console.log('[Playback] Waiting for minimum buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
-      isPlayingRef.current = false;
-      return;
+    // Only check minimum buffer before starting playback (initial safety net)
+    // Once playing, continue even if buffer drops below this threshold
+    if (!isPlayingRef.current) {
+      const MIN_BUFFER_BYTES = 64000; // 1000ms at 16kHz
+      const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+      if (totalQueuedBytes < MIN_BUFFER_BYTES) {
+        // console.log('[Playback] Waiting for initial buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
+        return;
+      }
     }
 
+    isPlayingRef.current = true;
+
     while (audioQueueRef.current.length > 0) {
-      console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
+      // console.log('[Playback] Processing queue, remaining:', audioQueueRef.current.length);
 
       // Use requestIdleCallback to process audio when main thread is idle
       await new Promise(resolve => {
@@ -227,19 +230,12 @@ export default function InterviewPage() {
         }
       });
 
-      // Adaptive buffering based on connection quality
+      // Fixed buffering - network estimation doesn't work reliably
       const chunksToMerge = [];
       let totalSize = 0;
-      // Larger adaptive buffer targets to better handle laggy internet
-      // Bytes at 24kHz linear16: bytes = 24000 * 2 * seconds
-      const waitMs = connectionQuality >= 80 ? 30 : connectionQuality >= 50 ? 50 : connectionQuality >= 25 ? 80 : 120;
-      const targetBufferSize = connectionQuality >= 80
-        ? 12000   // ~250ms
-        : connectionQuality >= 50
-          ? 18000   // ~375ms
-          : connectionQuality >= 25
-            ? 24000   // ~500ms
-            : 36000;  // ~750ms
+      // Use conservative buffering settings (assume 25% quality)
+      const waitMs = 80;
+      const targetBufferSize = 64000; // ~2000ms - merge 5+ chunks
 
       if (audioQueueRef.current.length > 0) {
         const chunk = audioQueueRef.current.shift()!;
@@ -263,15 +259,15 @@ export default function InterviewPage() {
       }
 
       try {
-        console.log('[Playback] Decoding WAV, size:', mergedChunk.byteLength);
+        // console.log('[Playback] Decoding WAV, size:', mergedChunk.byteLength);
         const wavHeader = createWavHeader(mergedChunk.byteLength, 16000);
         const wavFile = new Uint8Array(wavHeader.length + mergedChunk.byteLength);
         wavFile.set(wavHeader, 0);
         wavFile.set(mergedChunk, wavHeader.length);
 
-        console.log('[Playback] Calling decodeAudioData with:', wavFile.length, 'bytes');
+        // console.log('[Playback] Calling decodeAudioData with:', wavFile.length, 'bytes');
         const audioBuffer = await ctx.decodeAudioData(wavFile.buffer.slice(0));
-        console.log('[Playback] Decode successful, duration:', audioBuffer.duration, 'length:', audioBuffer.length);
+        // console.log('[Playback] Decode successful, duration:', audioBuffer.duration, 'length:', audioBuffer.length);
 
         const source = ctx.createBufferSource();
         currentSourceRef.current = source;
@@ -281,13 +277,13 @@ export default function InterviewPage() {
         gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.003);
 
         source.connect(gain).connect(ctx.destination);
-        console.log('[Playback] Starting source');
+        // console.log('[Playback] Starting source');
         source.start();
-        console.log('[Playback] Source started');
+        // console.log('[Playback] Source started');
 
         await new Promise(resolve => {
           source.onended = () => {
-            console.log('[Playback] Source ended');
+            // console.log('[Playback] Source ended');
             resolve(null);
           };
         });
@@ -295,7 +291,7 @@ export default function InterviewPage() {
         console.error('[Playback] Error:', err);
       }
     }
-    console.log('[Playback] Queue empty, stopping processor');
+    // console.log('[Playback] Queue empty, stopping processor');
     isPlayingRef.current = false;
   };
 
@@ -331,6 +327,11 @@ export default function InterviewPage() {
       .then(res => res.json())
       .then(data => setToken(data.token))
       .catch(() => setError('Failed to get token'));
+  }, []);
+
+  // Set random connection quality on mount (avoid hydration mismatch)
+  useEffect(() => {
+    setConnectionQuality(Math.floor(Math.random() * 14) + 5); // Random 5-18
   }, []);
 
 
@@ -429,11 +430,14 @@ SNIPPET USAGE:
 - NEVER include the answer in the snippet - if you ask about a specific part of the text, hide the answer to your question in the snippet so that the student can't cheat
 - Always hide_text_segment() after they answer
 
-FILL-IN-THE-GAP EXAMPLE:
-- This is a type of question where you test the student's ability to recall specific information from their work
-- Show "The author argues that ___ is the primary cause" (hiding the actual argument)
-- Then ask: "What goes in the blank?"
-- The answer should NOT be visible in the snippet - student must recall it from their work
+EXAMPLES OF QUESTION TYPES YOU CAN USE:
+1. **Next sentence**: "What did you say after this?" (show snippet)
+2. **Reasoning**: "Why did you choose this approach?" or "How did you reach that conclusion?" (show snippet)
+3. **Process**: "Walk me through how you figured this out" (show snippet)
+4. **Specifics**: "Can you explain what you meant by [concept]?" (show snippet as a follow up if needs clarification)
+5. **Fill-in-gap**: Snippet with blanks, ask "What goes here?" (show snippet)
+6. **Paraphrase**: "Can you say that in different words?" (show snippet)
+7. **Examples**: "Can you give me an example of what you mean?"
 
 AVAILABLE FUNCTIONS:
 - show_text_segment(segment): Display a SHORT snippet with key parts replaced by "___" - DO NOT show answers
@@ -667,7 +671,7 @@ End the interview once you have a reasonable sense of their understanding. Don't
                 <div className="border border-border bg-white rounded-lg p-6 overflow-y-auto space-y-4 shadow-sm" style={{ maxHeight: '50vh' }}>
                   {transcript.map((msg, idx) => (
                     <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
-                      <div className={`inline-block max-w-xs px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-muted text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
+                      <div className={`inline-block max-w-2xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'border border-border text-foreground' : 'bg-gray-100 text-foreground border border-border'}`}>
                         <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'You' : 'Interviewer'}</p>
                         <p>{msg.content}</p>
                       </div>
@@ -708,16 +712,14 @@ End the interview once you have a reasonable sense of their understanding. Don't
           )}
         </div>
       </div>
-      {/* Network speed bar at the bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        <div className="max-w-5xl mx-auto px-6 pb-4 pt-6">
-          <div className="bg-white border border-border rounded-lg shadow-sm p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Network</span>
-              <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
+      {/* Network stats */}
+      <div className="max-w-5xl mx-auto px-6 pb-4 pt-12">
+        <div className="bg-white border border-border rounded-lg shadow-sm p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Network</span>
+            <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
           </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
         </div>
       </div>
     </>

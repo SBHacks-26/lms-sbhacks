@@ -247,6 +247,22 @@ export default function AssignmentDetail() {
                         {submission.score}/{assignment.maxScore}
                       </span>
                     )}
+                    {/* Interview Results */}
+                    {submission.interviewVerdict && (
+                      <span className={`px-2 py-0.5 text-xs font-semibold border ${submission.interviewVerdict === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
+                        submission.interviewVerdict === 'flagged' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                        {submission.interviewVerdict === 'verified' ? 'Verified' :
+                          submission.interviewVerdict === 'flagged' ? 'Flagged' :
+                            submission.interviewVerdict}
+                      </span>
+                    )}
+                    {submission.interviewScore !== undefined && submission.interviewScore !== null && (
+                      <span className="bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 text-xs font-semibold">
+                        IS: {submission.interviewScore}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Submitted {new Date(submission.submittedAt).toLocaleDateString()}

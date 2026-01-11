@@ -17,6 +17,7 @@ export default function SubmissionReview() {
   const [isGrading, setIsGrading] = useState(false);
   const [gradeData, setGradeData] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [analyzingInterview, setAnalyzingInterview] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -40,24 +41,87 @@ export default function SubmissionReview() {
 
     if (!params.id) return;
 
-    // Fetch submission details
-    fetch(`/api/submissions/${params.id}`)
-      .then(res => res.json())
-      .then(data => {
-        setSubmission(data.submission);
-        if (data.submission?.assignmentId) {
-          return fetch(`/api/assignments/${data.submission.assignmentId}`);
+    if (!params.id) return;
+
+    const fetchSubmission = async () => {
+      try {
+        const res = await fetch(`/api/submissions/${params.id}`);
+        const data = await res.json();
+
+        if (data.submission) {
+          setSubmission(data.submission);
+
+          if (!assignment && data.submission.assignmentId) {
+            const assignRes = await fetch(`/api/assignments/${data.submission.assignmentId}`);
+            const assignData = await assignRes.json();
+            if (assignData) setAssignment(assignData.assignment);
+          }
+
+          // Allow page to render immediately
+          setLoading(false);
+
+          // Check if interview is done but no verdict (missing analysis)
+          console.log('[Debug] Checking auto-verdict trigger:', {
+            completed: data.submission.interviewCompleted,
+            transcriptLen: data.submission.interviewTranscript?.length,
+            verdict: data.submission.interviewVerdict,
+            analyzing: analyzingInterview
+          });
+
+          // Explicitly log the condition result to debug
+          const triggerCondition = Boolean(
+            data.submission.interviewCompleted &&
+            data.submission.interviewTranscript &&
+            data.submission.interviewTranscript.length > 0 &&
+            !data.submission.interviewVerdict &&
+            !analyzingInterview
+          );
+          console.log('[Debug] Trigger condition evaluates to:', triggerCondition);
+
+          if (triggerCondition) {
+            console.log('Interview completed but no verdict found - triggering auto-analysis...');
+            setAnalyzingInterview(true);
+            try {
+              // Re-submit the transcript to trigger analysis
+              console.log('[Debug] Sending transcript to API...', `/api/submissions/${params.id}/transcript`);
+              const analysisRes = await fetch(`/api/submissions/${params.id}/transcript`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transcript: data.submission.interviewTranscript })
+              });
+              console.log('[Debug] API Response status:', analysisRes.status);
+
+              if (!analysisRes.ok) {
+                const errText = await analysisRes.text();
+                console.error('[Debug] API Error:', errText);
+                throw new Error(`API failed: ${analysisRes.status} ${errText}`);
+              }
+
+              // Refresh submission to get the new verdict
+              const refreshRes = await fetch(`/api/submissions/${params.id}?t=${Date.now()}`);
+              const refreshData = await refreshRes.json();
+              console.log('[Debug] Refreshed submission data:', {
+                verdict: refreshData.submission?.interviewVerdict,
+                score: refreshData.submission?.interviewScore
+              });
+
+              if (refreshData.submission) {
+                setSubmission(refreshData.submission);
+              }
+            } catch (err) {
+              console.error('Failed to trigger interview analysis:', err);
+            } finally {
+              setAnalyzingInterview(false);
+            }
+          }
         }
-      })
-      .then(res => res?.json())
-      .then(data => {
-        if (data) setAssignment(data.assignment);
-        setLoading(false);
-      })
-      .catch(err => {
+      } catch (err) {
         console.error('Error loading submission:', err);
         setLoading(false);
-      });
+      }
+    };
+
+    fetchSubmission();
   }, [params.id, user, isLoaded, router]);
 
   if (loading) return <LoadingSpinner text="Loading submission..." />;
@@ -88,36 +152,55 @@ export default function SubmissionReview() {
               <span>Submitted {new Date(submission.submittedAt).toLocaleDateString()}</span>
             </div>
           </div>
-          {submission.needsInterview && !submission.interviewCompleted && (
-            <span className="bg-destructive px-3 py-1 text-sm font-semibold text-white">
-              Flagged
-            </span>
-          )}
+          <div className="flex flex-col gap-2 items-end">
+            {submission.needsInterview && !submission.interviewCompleted && (
+              <span className="bg-destructive px-3 py-1 text-sm font-semibold text-white">
+                Flagged: Interview Needed
+              </span>
+            )}
+            {submission.interviewVerdict ? (
+              <span className={`px-3 py-1 text-sm font-semibold border ${submission.interviewVerdict === 'verified' ? 'bg-green-100 text-green-800 border-green-300' :
+                submission.interviewVerdict === 'flagged' ? 'bg-red-100 text-red-800 border-red-300' :
+                  'bg-gray-100 text-gray-800 border-gray-300'
+                }`}>
+                Interview: {submission.interviewVerdict === 'verified' ? 'Verified' :
+                  submission.interviewVerdict === 'flagged' ? 'Flagged' :
+                    submission.interviewVerdict}
+              </span>
+            ) : analyzingInterview ? (
+              <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 px-3 py-1 rounded border border-yellow-200">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-yellow-600 border-t-transparent"></div>
+                Generating verdict...
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {submission.suspicionScore > 0 && (
-        <div className="mb-6 border border-destructive bg-destructive/10 p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div className="flex-1">
-              <h3 className="font-semibold text-destructive">Concerns detected</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {submission.suspicionScore} indicator{submission.suspicionScore > 1 ? 's' : ''} found that suggest possible AI use or plagiarism.
-              </p>
-              <div className="mt-3 space-y-2">
-                {submission.indicatorsFound?.map((indicator: any, index: number) => (
-                  <div key={index} className="border-l-2 border-destructive pl-3">
-                    <p className="text-sm font-semibold">{indicator.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
-                    <p className="text-sm text-muted-foreground">"{indicator.evidence}"</p>
-                    <p className="text-xs text-muted-foreground">Location: {indicator.location}</p>
-                  </div>
-                ))}
+      {
+        submission.suspicionScore > 0 && (
+          <div className="mb-6 border border-destructive bg-destructive/10 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1">
+                <h3 className="font-semibold text-destructive">Concerns detected</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {submission.suspicionScore} indicator{submission.suspicionScore > 1 ? 's' : ''} found that suggest possible AI use or plagiarism.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {submission.indicatorsFound?.map((indicator: any, index: number) => (
+                    <div key={index} className="border-l-2 border-destructive pl-3">
+                      <p className="text-sm font-semibold">{indicator.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
+                      <p className="text-sm text-muted-foreground">"{indicator.evidence}"</p>
+                      <p className="text-xs text-muted-foreground">Location: {indicator.location}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="border border-border bg-card p-4 shadow-sm">
@@ -153,202 +236,222 @@ export default function SubmissionReview() {
         )}
       </div>
 
-      {submission.feedback && (
-        <div className="mb-6 border border-border bg-card p-6">
-          <h3 className="mb-3 font-semibold">Feedback</h3>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{submission.feedback}</p>
-        </div>
-      )}
-
-      {submission.interviewCompleted && submission.interviewTranscript && (
-        <div className="mb-6 border border-border bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Interview Results</h2>
-            <div className="flex gap-3">
-              <span className={`px-2 py-1 rounded text-xs font-medium border ${submission.interviewVerdict === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
-                  submission.interviewVerdict === 'flagged' ? 'bg-red-50 text-red-700 border-red-200' :
-                    'bg-gray-50 text-gray-700 border-gray-200'
-                }`}>
-                Verdict: {submission.interviewVerdict || 'Unknown'}
-              </span>
-              <span className="px-2 py-1 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
-                Score: {submission.interviewScore !== undefined ? submission.interviewScore : 'N/A'}
-              </span>
-            </div>
+      {
+        submission.feedback && (
+          <div className="mb-6 border border-border bg-card p-6">
+            <h3 className="mb-3 font-semibold">Feedback</h3>
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{submission.feedback}</p>
           </div>
+        )
+      }
 
-          <div className="space-y-3 max-h-96 overflow-y-auto mb-6 p-4 border rounded bg-gray-50/50">
-            {submission.interviewTranscript.map((msg: any, idx: number) => (
-              <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
-                <div className={`inline-block max-w-2xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'border border-border bg-white text-foreground' : 'bg-blue-50 text-foreground border border-blue-100'}`}>
-                  <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'Student' : 'AI Interviewer'}</p>
-                  <p className="text-sm">{msg.content}</p>
-                </div>
+      {
+        submission.interviewCompleted && submission.interviewTranscript && (
+          <div className="mb-6 border border-border bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">Interview Results</h2>
+                {analyzingInterview && !submission.interviewVerdict && (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                )}
               </div>
-            ))}
-          </div>
-
-          {submission.interviewReasoning && (
-            <div className="pt-4 border-t border-border">
-              <h3 className="text-sm font-semibold mb-2">AI Analysis</h3>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{submission.interviewReasoning}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {assignment?.rubric && (
-        <div className="mb-6 border border-border bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Grading</h2>
-            {!isGrading && (
-              <Button
-                onClick={async () => {
-                  setIsGrading(true);
-                  // Fetch auto-grade if available
-                  try {
-                    const res = await fetch(`/api/submissions/${params.id}/grade`);
-                    const data = await res.json();
-                    if (data.autoGrade) {
-                      setGradeData(data.autoGrade);
-                    } else if (submission.manualGrade) {
-                      setGradeData(submission.manualGrade);
-                    } else {
-                      // Initialize with zeros
-                      setGradeData({
-                        criteria: assignment.rubric.map((item: any) => ({
-                          criterionId: item.id,
-                          criterion: item.criterion,
-                          maxPoints: item.maxPoints,
-                          pointsEarned: 0,
-                          justification: ''
-                        }))
-                      });
-                    }
-                  } catch (err) {
-                    console.error('Failed to load grade:', err);
-                  }
-                }}
-                variant="outline"
-                className="border-border bg-white px-6 text-sm font-semibold text-foreground hover:bg-muted"
-              >
-                {submission.score !== null && submission.score !== undefined ? 'Edit Grade' : 'Grade Submission'}
-              </Button>
-            )}
-          </div>
-
-          {isGrading && gradeData && (
-            <div className="space-y-4">
-              {gradeData.criteria.map((item: any, index: number) => {
-                const rubricItem = assignment.rubric.find((r: any) => r.id === item.criterionId);
-                return (
-                  <div key={index} className="border border-border p-4">
-                    <div className="mb-2 flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-semibold">{rubricItem?.criterion || item.criterion}</p>
-                        <p className="text-sm text-muted-foreground">{rubricItem?.description}</p>
-                      </div>
-                      <div className="ml-4 flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max={rubricItem?.maxPoints || item.maxPoints}
-                          value={item.pointsEarned}
-                          onChange={(e) => {
-                            const newCriteria = [...gradeData.criteria];
-                            newCriteria[index].pointsEarned = parseInt(e.target.value) || 0;
-                            setGradeData({ ...gradeData, criteria: newCriteria });
-                          }}
-                          className="w-16 border border-border px-2 py-1 text-center"
-                        />
-                        <span className="text-sm text-muted-foreground">/ {rubricItem?.maxPoints || item.maxPoints}</span>
-                      </div>
-                    </div>
-                    <textarea
-                      placeholder="Feedback (optional)"
-                      value={item.justification || ''}
-                      onChange={(e) => {
-                        const newCriteria = [...gradeData.criteria];
-                        newCriteria[index].justification = e.target.value;
-                        setGradeData({ ...gradeData, criteria: newCriteria });
-                      }}
-                      className="mt-2 w-full border border-border p-2 text-sm"
-                      rows={2}
-                    />
+              <div className="flex gap-3">
+                {submission.interviewVerdict ? (
+                  <>
+                    <span className={`px-2 py-1 rounded text-xs font-medium border ${submission.interviewVerdict === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
+                      submission.interviewVerdict === 'flagged' ? 'bg-red-50 text-red-700 border-red-200' :
+                        'bg-gray-50 text-gray-700 border-gray-200'
+                      }`}>
+                      Verdict: {submission.interviewVerdict}
+                    </span>
+                    <span className="px-2 py-1 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                      Score: {submission.interviewScore !== undefined ? submission.interviewScore : 'N/A'}% human
+                    </span>
+                  </>
+                ) : analyzingInterview ? (
+                  <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-yellow-600 border-t-transparent"></div>
+                    Generating verdict...
                   </div>
-                );
-              })}
-
-              <div className="flex items-center justify-between border-t border-border pt-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Score</p>
-                  <p className="text-2xl font-bold">
-                    {gradeData.criteria.reduce((sum: number, c: any) => sum + (c.pointsEarned || 0), 0)} / {assignment.maxScore || 100}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => {
-                      setIsGrading(false);
-                      setGradeData(null);
-                    }}
-                    variant="outline"
-                    disabled={saving}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      setSaving(true);
-                      try {
-                        const totalScore = gradeData.criteria.reduce((sum: number, c: any) => sum + (c.pointsEarned || 0), 0);
-                        const res = await fetch(`/api/submissions/${params.id}/manual-grade`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            criteria: gradeData.criteria,
-                            totalScore,
-                            teacherId: user?.id
-                          })
-                        });
-                        if (res.ok) {
-                          setSubmission({ ...submission, score: totalScore, manualGrade: gradeData });
-                          setIsGrading(false);
-                        }
-                      } catch (err) {
-                        console.error('Failed to save grade:', err);
-                      } finally {
-                        setSaving(false);
-                      }
-                    }}
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <span className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
-                        Saving...
-                      </span>
-                    ) : (
-                      'Save Grade'
-                    )}
-                  </Button>
-                </div>
+                ) : null}
               </div>
             </div>
-          )}
 
-          {!isGrading && (submission.manualGrade || submission.autoGrade) && (
-            <div className="space-y-2">
-              {(submission.manualGrade?.criteria || submission.autoGrade?.criteria || []).map((item: any, index: number) => (
-                <div key={index} className="flex items-center justify-between border-b border-border pb-2">
-                  <span className="text-sm">{item.criterion}</span>
-                  <span className="font-semibold">{item.pointsEarned} / {item.maxPoints}</span>
+            <div className="space-y-3 max-h-96 overflow-y-auto mb-6 p-4 border rounded bg-gray-50/50">
+              {submission.interviewTranscript.map((msg: any, idx: number) => (
+                <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
+                  <div className={`inline-block max-w-2xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'border border-border bg-white text-foreground' : 'bg-blue-50 text-foreground border border-blue-100'}`}>
+                    <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'Student' : 'AI Interviewer'}</p>
+                    <p className="text-sm">{msg.content}</p>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
-    </div>
+
+            {submission.interviewReasoning && (
+              <div className="pt-4 border-t border-border">
+                <h3 className="text-sm font-semibold mb-2">AI Analysis</h3>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{submission.interviewReasoning}</p>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      {
+        assignment?.rubric && (
+          <div className="mb-6 border border-border bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Grading</h2>
+              {!isGrading && (
+                <Button
+                  onClick={async () => {
+                    setIsGrading(true);
+                    // Fetch auto-grade if available
+                    try {
+                      const res = await fetch(`/api/submissions/${params.id}/grade`);
+                      const data = await res.json();
+                      if (data.autoGrade) {
+                        setGradeData(data.autoGrade);
+                      } else if (submission.manualGrade) {
+                        setGradeData(submission.manualGrade);
+                      } else {
+                        // Initialize with zeros
+                        setGradeData({
+                          criteria: assignment.rubric.map((item: any) => ({
+                            criterionId: item.id,
+                            criterion: item.criterion,
+                            maxPoints: item.maxPoints,
+                            pointsEarned: 0,
+                            justification: ''
+                          }))
+                        });
+                      }
+                    } catch (err) {
+                      console.error('Failed to load grade:', err);
+                    }
+                  }}
+                  variant="outline"
+                  className="border-border bg-white px-6 text-sm font-semibold text-foreground hover:bg-muted"
+                >
+                  {submission.score !== null && submission.score !== undefined ? 'Edit Grade' : 'Grade Submission'}
+                </Button>
+              )}
+            </div>
+
+            {isGrading && gradeData && (
+              <div className="space-y-4">
+                {gradeData.criteria.map((item: any, index: number) => {
+                  const rubricItem = assignment.rubric.find((r: any) => r.id === item.criterionId);
+                  return (
+                    <div key={index} className="border border-border p-4">
+                      <div className="mb-2 flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-semibold">{rubricItem?.criterion || item.criterion}</p>
+                          <p className="text-sm text-muted-foreground">{rubricItem?.description}</p>
+                        </div>
+                        <div className="ml-4 flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max={rubricItem?.maxPoints || item.maxPoints}
+                            value={item.pointsEarned}
+                            onChange={(e) => {
+                              const newCriteria = [...gradeData.criteria];
+                              newCriteria[index].pointsEarned = parseInt(e.target.value) || 0;
+                              setGradeData({ ...gradeData, criteria: newCriteria });
+                            }}
+                            className="w-16 border border-border px-2 py-1 text-center"
+                          />
+                          <span className="text-sm text-muted-foreground">/ {rubricItem?.maxPoints || item.maxPoints}</span>
+                        </div>
+                      </div>
+                      <textarea
+                        placeholder="Feedback (optional)"
+                        value={item.justification || ''}
+                        onChange={(e) => {
+                          const newCriteria = [...gradeData.criteria];
+                          newCriteria[index].justification = e.target.value;
+                          setGradeData({ ...gradeData, criteria: newCriteria });
+                        }}
+                        className="mt-2 w-full border border-border p-2 text-sm"
+                        rows={2}
+                      />
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Score</p>
+                    <p className="text-2xl font-bold">
+                      {gradeData.criteria.reduce((sum: number, c: any) => sum + (c.pointsEarned || 0), 0)} / {assignment.maxScore || 100}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setIsGrading(false);
+                        setGradeData(null);
+                      }}
+                      variant="outline"
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          const totalScore = gradeData.criteria.reduce((sum: number, c: any) => sum + (c.pointsEarned || 0), 0);
+                          const res = await fetch(`/api/submissions/${params.id}/manual-grade`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              criteria: gradeData.criteria,
+                              totalScore,
+                              teacherId: user?.id
+                            })
+                          });
+                          if (res.ok) {
+                            setSubmission({ ...submission, score: totalScore, manualGrade: gradeData });
+                            setIsGrading(false);
+                          }
+                        } catch (err) {
+                          console.error('Failed to save grade:', err);
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <span className="flex items-center gap-2">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                          Saving...
+                        </span>
+                      ) : (
+                        'Save Grade'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!isGrading && (submission.manualGrade || submission.autoGrade) && (
+              <div className="space-y-2">
+                {(submission.manualGrade?.criteria || submission.autoGrade?.criteria || []).map((item: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between border-b border-border pb-2">
+                    <span className="text-sm">{item.criterion}</span>
+                    <span className="font-semibold">{item.pointsEarned} / {item.maxPoints}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+    </div >
   );
 }

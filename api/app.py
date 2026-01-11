@@ -998,33 +998,37 @@ def save_transcript(submission_id):
             return jsonify({"error": "Submission not found"}), 404
         
         # Analyze the interview
+        print(f"[TRANSCRIPT] Analyzing transcript length: {len(transcript)}")
         analysis = analyze_interview_transcript(
             transcript=transcript,
             submission_text=submission.get("response_text", "")
         )
+        print(f"[TRANSCRIPT] Analysis result: {analysis}")
         
         # Determine status based on score
         # Using exact user requirements: <50 = suspicious, >50 = verified
         score = analysis.get("score", 0)
         new_status = "flagged" if score < 50 else "verified"
+        print(f"[TRANSCRIPT] Calculated verdict: {new_status} (Score: {score})")
         
         update_fields = {
             "interviewTranscript": transcript,
             "interviewScore": score,
             "interviewReasoning": analysis.get("reasoning", ""),
-            "interviewVerdict": analysis.get("verdict", "UNCLEAR"),
+            "interviewVerdict": new_status, # Use the calculated status directly
             "interviewCompleted": True,
             "updatedAt": datetime.now(UTC)
         }
         
         # Only update status if it was previously flagged/suspicious
-        if submission.get("status") == "flagged":
+        if submission.get("status") == "flagged" or submission.get("status") == "pending":
              update_fields["status"] = new_status
 
-        submissions_col.update_one(
+        result = submissions_col.update_one(
             {"_id": ObjectId(submission_id)},
             {"$set": update_fields}
         )
+        print(f"[TRANSCRIPT] DB Update acknowledged: {result.acknowledged}, Modified: {result.modified_count}")
         
         return jsonify({
             "success": True,

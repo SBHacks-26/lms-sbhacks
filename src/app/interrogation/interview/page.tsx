@@ -213,10 +213,22 @@ export default function InterviewPage() {
     // Only check minimum buffer before starting playback (initial safety net)
     // Once playing, continue even if buffer drops below this threshold
     if (!isPlayingRef.current) {
-      const MIN_BUFFER_BYTES = 64000; // 1000ms at 16kHz
+      const MIN_BUFFER_BYTES = 48000; // Reduced from 64000 to ~375ms at 16kHz
       const totalQueuedBytes = audioQueueRef.current.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+
+      // If we have enough bytes OR if we have data and it's been waiting (implicit flush via next call)
       if (totalQueuedBytes < MIN_BUFFER_BYTES) {
-        // console.log('[Playback] Waiting for initial buffer, have:', totalQueuedBytes, 'need:', MIN_BUFFER_BYTES);
+        // Check if this is likely the end of a short utterance (heuristic could be better, but this helps)
+        // For now, simple return. The next chunk will trigger another check.
+        // If a short message is truly < MIN_BUFFER as final state, we need a flush mechanism.
+        // We'll rely on a small timeout to force flush if stuck.
+        setTimeout(() => {
+          if (audioQueueRef.current.length > 0 && !isPlayingRef.current) {
+            console.log('[Playback] Force starting playback for small buffer');
+            isPlayingRef.current = true;
+            processAudioQueue();
+          }
+        }, 500);
         return;
       }
     }
@@ -468,6 +480,7 @@ End the interview once you have a reasonable sense of their understanding. Don't
 
     // Barge-in: if user starts speaking, stop any agent audio playback
     dgClient.on(AgentEvents.UserStartedSpeaking, () => {
+      console.log('[UserStartedSpeaking] VAD triggered');
       if (currentSourceRef.current) {
         try { currentSourceRef.current.stop(); } catch (_) { }
       }
@@ -484,10 +497,15 @@ End the interview once you have a reasonable sense of their understanding. Don't
     });
 
     dgClient.on(AgentEvents.ConversationText, (m: any) => {
-      if (m.content && m.content.trim()) {
+      console.log('[ConversationText] Event received:', JSON.stringify(m));
+      // Using relaxed check: if content exists (even empty string), we might want to see it for debugging
+      // But typically we want at least some content.
+      if (m.content !== undefined) {
+        console.log('[ConversationText] Adding to transcript:', { role: m.role, content: m.content });
         setTranscript((prev) => [...prev, { role: (m.role || 'unknown').toLowerCase(), content: m.content }]);
+      } else {
+        console.log('[ConversationText] Skipped missing content field:', m);
       }
-      console.log('[ConversationText] Raw payload:', JSON.stringify(m));
     });
 
     dgClient.on(AgentEvents.Error, (err: any) => {

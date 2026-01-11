@@ -140,14 +140,12 @@ export default function InterviewPage() {
     
     const ctx = audioContextRef.current;
     isPlayingRef.current = true;
-    console.log('Starting audio playback, queue length:', audioQueueRef.current.length);
 
     while (audioQueueRef.current.length > 0) {
-      // Buffer chunks for ~100-150ms for balance between quality and latency
+      // Buffer chunks for ~300ms for better quality
       const chunksToMerge = [];
       let totalSize = 0;
-      const targetBufferSize = 9600; // ~200ms at 24kHz (24000 samples/s * 2 bytes * 0.2s)
-      const minBufferSize = 4800; // ~100ms minimum
+      const targetBufferSize = 14400; // ~300ms at 24kHz (24000 samples/s * 2 bytes * 0.3s)
       
       // Collect first chunk
       if (audioQueueRef.current.length > 0) {
@@ -156,8 +154,8 @@ export default function InterviewPage() {
         totalSize += chunk.byteLength;
       }
       
-      // Wait briefly for more chunks to arrive (reduces gaps)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Wait briefly for more chunks to arrive
+      await new Promise(resolve => setTimeout(resolve, 30));
       
       // Collect additional chunks up to target size
       while (audioQueueRef.current.length > 0 && totalSize < targetBufferSize) {
@@ -189,8 +187,8 @@ export default function InterviewPage() {
         currentSourceRef.current = source;
         source.buffer = audioBuffer;
         const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.05, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.003);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.005);
 
         source.connect(gain).connect(ctx.destination);
         source.start();
@@ -307,11 +305,12 @@ GUIDE:
 - Use brief acknowledgments: "Got it," "Thanks," "Okay," then move to the next question.
 - Keep it conversational and fast-paced; avoid long monologues.
 - Do NOT number or label questions.
-- When done, end with: "Thanks, your response has been recorded."
+- When you have enough information, call finish_interview() to end the session.
 
 AVAILABLE FUNCTIONS:
 - show_text_segment(segment): Display a text snippet to the user for reference (e.g., for fill-the-gap questions)
 - hide_text_segment(): Remove the displayed snippet
+- finish_interview(): End the interview when you're satisfied with the responses
 
 Use these functions when you need the student to see specific text, then hide it when done.`
           }
@@ -356,6 +355,9 @@ Use these functions when you need the student to see specific text, then hide it
         setVisibleSegment(args.segment || null);
       } else if (functionCall.function_name === 'hide_text_segment') {
         setVisibleSegment(null);
+      } else if (functionCall.function_name === 'finish_interview') {
+        saveTranscript();
+        setIsComplete(true);
       }
     });
   };

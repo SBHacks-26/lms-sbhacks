@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const cheatingScore = total > 0 ? found / total : 0;
 
     // Determine status
-    const status = cheatingScore > 0.7 ? 'flagged' : 'submitted';
+    const status = cheatingScore > 0.75 ? 'flagged' : 'submitted';
 
     // Store submission
     const submission = {
@@ -75,7 +75,10 @@ export async function POST(request: Request) {
       cheatingScore,
       indicatorsFound: analysis.indicators_found,
       status,
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      needsInterview: cheatingScore > 0.75,
+      interviewCompleted: false,
+      suspicionScore: found,
     };
 
     const result = await db.collection('submissions').insertOne(submission);
@@ -85,7 +88,7 @@ export async function POST(request: Request) {
       success: true,
       submissionId: result.insertedId.toString(),
       cheatingScore,
-      needsInterview: cheatingScore > 0.7,
+      needsInterview: cheatingScore > 0.75,
       analysis
     });
   } catch (error) {

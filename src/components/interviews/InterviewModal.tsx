@@ -16,6 +16,19 @@ export function InterviewModal({ assignmentId, submissionId, onClose }: Intervie
   const [client, setClient] = useState<any>(null);
   const [micState, setMicState] = useState<'open' | 'loading' | 'closed'>('closed');
   const [token, setToken] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(30);
+
+  // Auto-start countdown
+  useEffect(() => {
+    if (client || !token) return;
+
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      connect();
+    }
+  }, [countdown, client, token]);
 
   // Get Deepgram token
   useEffect(() => {
@@ -99,17 +112,22 @@ Then output: VERDICT: LIKELY_CHEATED | UNCLEAR | LEGITIMATE`
             </p>
 
             {!client && token && (
-              <button
-                onClick={connect}
-                className="bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                Start interview
-              </button>
+              <div className="space-y-4">
+                <p className="font-semibold text-destructive">
+                  Auto-starting in {countdown}s...
+                </p>
+                <button
+                  onClick={connect}
+                  className="bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Start interview now ({countdown}s)
+                </button>
+              </div>
             )}
 
             {client && (
               <>
-                <Mic state={micState} client={client} onError={() => {}} />
+                <Mic state={micState} client={client} onError={() => { }} />
 
                 <div className="mt-4 max-h-64 overflow-y-auto border border-border p-4">
                   {transcript.map((msg, i) => (

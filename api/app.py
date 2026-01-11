@@ -7,12 +7,23 @@ from bson import ObjectId
 import pypdf
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
 from gemini import mutate_prompt, detect_indicators
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+# Configure CORS to allow Next.js dev server
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # MongoDB setup
 mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
@@ -154,46 +165,73 @@ def build_secret_replacement_pdf(visible_text: str, secret_text: str, output_pat
     return True
 
 
+@app.route("/health", methods=["GET"])
+def health():
+    """Simple health check endpoint."""
+    return jsonify({
+        "status": "ok",
+        "service": "lms-python-api",
+        "timestamp": str(datetime.now())
+    })
+
+
 @app.route("/generate", methods=["POST"])
 def generate():
     """Generate a homework PDF with invisible mutation for integrity checking."""
+    print(f"[GENERATE] Received request")
+
     data = request.get_json(silent=True) or {}
     visible_text = data.get("visible_text")
     teacher_id = data.get("teacher_id")
     assignment_id = data.get("assignment_id")
-    
+
+    print(f"[GENERATE] teacher_id={teacher_id}, assignment_id={assignment_id}, text_length={len(visible_text) if visible_text else 0}")
+
     if not isinstance(visible_text, str) or len(visible_text) == 0:
+        print("[GENERATE] Error: Invalid visible_text")
         return jsonify({"error": "Provide JSON with 'visible_text': string, 'teacher_id': string, 'assignment_id': string"}), 400
-    
-    # Use Gemini to suggest mutations
-    mutation_result = mutate_prompt(prompt_text=visible_text)
-    mutated_text = mutation_result["mutated"]
-    mutations = mutation_result["mutations"]
-    changes = mutation_result["changes"]
-    
-    # Generate PDF with visible/invisible split
-    pdf_bytes = build_secret_replacement_pdf(visible_text=visible_text, secret_text=mutated_text, output_path=None)
-    
-    # Store homework metadata in MongoDB
-    homework_doc = {
-        "teacher_id": teacher_id,
-        "assignment_id": assignment_id,
-        "original_prompt": visible_text,
-        "mutated_prompt": mutated_text,
-        "mutations": mutations,
-        "changes": changes
-    }
-    result = homeworks_col.insert_one(homework_doc)
-    homework_id = str(result.inserted_id)
-    
-    return jsonify({
-        "homework_id": homework_id,
-        "original_prompt": visible_text,
-        "mutated_prompt": mutated_text,
-        "mutations": mutations,
-        "changes": changes,
-        "pdf_download": "/download/" + homework_id
-    })
+
+    try:
+        # Use Gemini to suggest mutations
+        print("[GENERATE] Calling Gemini API...")
+        mutation_result = mutate_prompt(prompt_text=visible_text)
+        mutated_text = mutation_result["mutated"]
+        mutations = mutation_result["mutations"]
+        changes = mutation_result["changes"]
+        print(f"[GENERATE] Gemini returned {len(mutations)} mutations")
+
+        # Generate PDF with visible/invisible split
+        print("[GENERATE] Building PDF...")
+        pdf_bytes = build_secret_replacement_pdf(visible_text=visible_text, secret_text=mutated_text, output_path=None)
+        print(f"[GENERATE] PDF generated: {len(pdf_bytes)} bytes")
+
+        # Store homework metadata in MongoDB
+        print("[GENERATE] Storing in MongoDB...")
+        homework_doc = {
+            "teacher_id": teacher_id,
+            "assignment_id": assignment_id,
+            "original_prompt": visible_text,
+            "mutated_prompt": mutated_text,
+            "mutations": mutations,
+            "changes": changes
+        }
+        result = homeworks_col.insert_one(homework_doc)
+        homework_id = str(result.inserted_id)
+        print(f"[GENERATE] Success! homework_id={homework_id}")
+
+        return jsonify({
+            "homework_id": homework_id,
+            "original_prompt": visible_text,
+            "mutated_prompt": mutated_text,
+            "mutations": mutations,
+            "changes": changes,
+            "pdf_download": "/download/" + homework_id
+        })
+    except Exception as e:
+        print(f"[GENERATE] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/submit", methods=["POST"])

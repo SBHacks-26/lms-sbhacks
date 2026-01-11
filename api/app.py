@@ -28,6 +28,18 @@ CORS(app, resources={
     }
 })
 
+# Helper function to recursively convert ObjectIds to strings
+def convert_objectids(obj):
+    """Recursively convert all ObjectId instances to strings in a dict or list."""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectids(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectids(item) for item in obj]
+    else:
+        return obj
+
 # MongoDB setup
 mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 mongo_client = MongoClient(mongo_uri)
@@ -727,15 +739,8 @@ def get_assignment_submissions(assignment_id):
     try:
         submissions = list(submissions_col.find({"assignmentId": ObjectId(assignment_id)}))
         
-        for submission in submissions:
-            submission["_id"] = str(submission["_id"])
-            submission["assignmentId"] = str(submission["assignmentId"])
-            # Convert any other ObjectId fields that might exist
-            if "teacherId" in submission and isinstance(submission["teacherId"], ObjectId):
-                submission["teacherId"] = str(submission["teacherId"])
-            if "interviewResult" in submission and submission["interviewResult"]:
-                if "_id" in submission["interviewResult"] and isinstance(submission["interviewResult"]["_id"], ObjectId):
-                    submission["interviewResult"]["_id"] = str(submission["interviewResult"]["_id"])
+        # Convert all ObjectIds to strings recursively
+        submissions = [convert_objectids(sub) for sub in submissions]
         
         print(f"[SUBMISSIONS] Found {len(submissions)} submissions for assignment {assignment_id}")
         return jsonify({"submissions": submissions})
@@ -949,8 +954,8 @@ def get_submission(submission_id):
         if not submission:
             return jsonify({"error": "Submission not found"}), 404
         
-        submission["_id"] = str(submission["_id"])
-        submission["assignmentId"] = str(submission["assignmentId"])
+        # Convert all ObjectIds to strings recursively
+        submission = convert_objectids(submission)
         
         # Backward-compat: unify response text field
         # Prefer 'submittedText', fall back to legacy 'submissionText' or 'response_text'

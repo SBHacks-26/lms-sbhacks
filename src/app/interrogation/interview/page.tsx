@@ -29,6 +29,12 @@ export default function InterviewPage() {
   const isPlayingRef = useRef(false);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<Array<{ role: string; content: string }>>([]);
+
+  // Keep ref in sync with state for access in closures/timeouts
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
 
   // Create WAV header for linear16 PCM audio at 24kHz
   const createWavHeader = (dataLength: number, sampleRate: number = 24000): Uint8Array => {
@@ -187,10 +193,10 @@ export default function InterviewPage() {
 
     // Start playback if not already playing
     if (!isPlayingRef.current) {
-    //   console.log('[Audio] Starting playback processor');
+      //   console.log('[Audio] Starting playback processor');
       processAudioQueue();
     } else {
-    //   console.log('[Audio] Already playing, not starting new processor');
+      //   console.log('[Audio] Already playing, not starting new processor');
     }
   };
 
@@ -478,8 +484,14 @@ End the interview once you have a reasonable sense of their understanding. Don't
     });
 
     dgClient.on(AgentEvents.ConversationText, (m: any) => {
-      setTranscript((prev) => [...prev, { role: m.role, content: m.content }]);
+      if (m.content && m.content.trim()) {
+        setTranscript((prev) => [...prev, { role: (m.role || 'unknown').toLowerCase(), content: m.content }]);
+      }
       console.log('[ConversationText] Raw payload:', JSON.stringify(m));
+    });
+
+    dgClient.on(AgentEvents.Error, (err: any) => {
+      console.error('[AgentEvents.Error]', err);
     });
 
     // Handle function calls from the LLM (guarded parsing so we never throw)
@@ -563,10 +575,11 @@ End the interview once you have a reasonable sense of their understanding. Don't
 
   const saveTranscript = async () => {
     if (!submissionId) return;
+    // Use ref to get latest transcript even if called from closure
     await fetch(`/api/submissions/${submissionId}/transcript`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript })
+      body: JSON.stringify({ transcript: transcriptRef.current })
     });
     router.push(`/interrogation/complete?submissionId=${submissionId}`);
   };

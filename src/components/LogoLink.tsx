@@ -2,6 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 
 export function LogoLink() {
   const { user, isLoaded } = useUser();
@@ -24,10 +25,8 @@ export function LogoLink() {
   };
 
   return (
-    <Link href={getHref()} className="flex items-center gap-3 font-semibold text-lg text-foreground">
-      <span className="flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground font-bold tracking-wide">
-        GM
-      </span>
+    <Link href={getHref()} className="flex items-center gap-3 font-semibold text-lg text-foreground hover:opacity-90 transition-opacity">
+      <Logo className="h-10 w-10 text-primary" />
       <div className="leading-tight">
         <div>GradeMeIn</div>
         <div className="text-xs font-normal text-muted-foreground">Teach with confidence. Grade with trust.</div>

@@ -160,6 +160,43 @@ export default function SubmissionReview() {
         </div>
       )}
 
+      {submission.interviewCompleted && submission.interviewTranscript && (
+        <div className="mb-6 border border-border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Interview Results</h2>
+            <div className="flex gap-3">
+              <span className={`px-2 py-1 rounded text-xs font-medium border ${submission.interviewVerdict === 'verified' ? 'bg-green-50 text-green-700 border-green-200' :
+                  submission.interviewVerdict === 'flagged' ? 'bg-red-50 text-red-700 border-red-200' :
+                    'bg-gray-50 text-gray-700 border-gray-200'
+                }`}>
+                Verdict: {submission.interviewVerdict || 'Unknown'}
+              </span>
+              <span className="px-2 py-1 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                Score: {submission.interviewScore !== undefined ? submission.interviewScore : 'N/A'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto mb-6 p-4 border rounded bg-gray-50/50">
+            {submission.interviewTranscript.map((msg: any, idx: number) => (
+              <div key={idx} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
+                <div className={`inline-block max-w-2xl px-4 py-2 rounded-lg ${msg.role === 'user' ? 'border border-border bg-white text-foreground' : 'bg-blue-50 text-foreground border border-blue-100'}`}>
+                  <p className="text-xs font-semibold mb-1 opacity-75">{msg.role === 'user' ? 'Student' : 'AI Interviewer'}</p>
+                  <p className="text-sm">{msg.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {submission.interviewReasoning && (
+            <div className="pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold mb-2">AI Analysis</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{submission.interviewReasoning}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {assignment?.rubric && (
         <div className="mb-6 border border-border bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const requestData = await request.json();
     console.log(requestData);
 
-    const interviewTranscript = db.collection("transcript");
+    const interviewTranscript = db.collection("Interview");
     interviewTranscript.insertOne(requestData);
 
     return NextResponse.json({ success: true });

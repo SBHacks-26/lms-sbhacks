@@ -9,7 +9,6 @@ import {
   type AgentLiveClient,
 } from "@deepgram/sdk";
 import { Button } from "../ui/button";
-import addTranscript from "@/utils/addTranscript";
 
 /**
  * Main voice agent interface component
@@ -96,8 +95,6 @@ export const Body = () => {
 
   // === CONNECTION MANAGEMENT ===
   const disconnect = () => {
-    addTranscript(transcript);
-
     if (!client) {
       console.warn("⚠️ DISCONNECT: No client connected to disconnect.");
       setError("No client connected to disconnect.");
@@ -290,6 +287,20 @@ export const Body = () => {
         ...prev,
         { role: message.role, content: message.content },
       ]);
+      try {
+        const response = fetch("http://localhost:3000/api/interviews", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            transcript,
+          }),
+        });
+      } catch (error) {
+        console.error("Error while adding transcript:", error);
+        throw error;
+      }
     });
 
     // === EVENT HANDLERS ===

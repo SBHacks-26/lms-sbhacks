@@ -3,32 +3,40 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const studentId = searchParams.get('studentId');
-  const { db } = await connectToDatabase();
+  try {
+    const { searchParams } = new URL(request.url);
+    const studentId = searchParams.get('studentId');
+    const { db } = await connectToDatabase();
 
-  const assignments = await db.collection('assignments')
-    .find({})
-    .sort({ createdAt: -1 })
-    .toArray();
-
-  if (studentId) {
-    // If studentId provided, check which assignments they've submitted
-    const submissions = await db.collection('submissions')
-      .find({ studentId })
+    const assignments = await db.collection('assignments')
+      .find({})
+      .sort({ createdAt: -1 })
       .toArray();
 
-    const submittedAssignmentIds = new Set(submissions.map((s: any) => s.assignmentId.toString()));
+    if (studentId) {
+      // If studentId provided, check which assignments they've submitted
+      const submissions = await db.collection('submissions')
+        .find({ studentId })
+        .toArray();
 
-    const assignmentsWithStatus = assignments.map((assignment: any) => ({
-      ...assignment,
-      isSubmitted: submittedAssignmentIds.has(assignment._id.toString())
-    }));
+      const submittedAssignmentIds = new Set(submissions.map((s: any) => s.assignmentId.toString()));
 
-    return NextResponse.json({ assignments: assignmentsWithStatus });
+      const assignmentsWithStatus = assignments.map((assignment: any) => ({
+        ...assignment,
+        isSubmitted: submittedAssignmentIds.has(assignment._id.toString())
+      }));
+
+      return NextResponse.json({ assignments: assignmentsWithStatus });
+    }
+
+    return NextResponse.json({ assignments });
+  } catch (error) {
+    console.error('[ASSIGNMENTS GET] Error:', error);
+    return NextResponse.json({
+      error: 'Failed to fetch assignments',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
   }
-
-  return NextResponse.json({ assignments });
 }
 
 export async function POST(request: Request) {

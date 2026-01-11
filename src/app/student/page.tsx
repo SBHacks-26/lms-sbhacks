@@ -34,13 +34,19 @@ export default function StudentDashboard() {
     }
 
     fetch(`/api/assignments?studentId=${user.id}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
-        setAssignments(data.assignments);
+        setAssignments(data.assignments || []);
         setLoading(false);
       })
       .catch(err => {
         console.error('Error loading assignments:', err);
+        setAssignments([]);
         setLoading(false);
       });
   }, [user, isLoaded, router]);
@@ -69,8 +75,8 @@ export default function StudentDashboard() {
             key={assignment._id}
             href={`/student/${assignment._id}`}
             className={`flex items-center justify-between border px-4 py-3 transition ${assignment.isSubmitted
-                ? 'border-border/50 bg-muted/50 opacity-60 hover:bg-muted'
-                : 'border-border bg-white hover:bg-muted'
+              ? 'border-border/50 bg-muted/50 opacity-60 hover:bg-muted'
+              : 'border-border bg-white hover:bg-muted'
               }`}
           >
             <div>

@@ -364,7 +364,7 @@ export default function InterviewPage() {
             functions: [
               {
                 name: 'show_text_segment',
-                description: 'Display a specific text segment from the student submission to the user for reference during questioning (e.g., for fill-in-the-gap or pointing to exact passages)',
+                description: 'Display a specific text segment from the student submission to the user for reference during questioning (e.g., for fill-in-the-gap or to give context to a question). NEVER read out or repeat text from the student submission in your messages. Text should be as short as possible.',
                 parameters: {
                   type: 'object',
                   properties: {
@@ -401,7 +401,7 @@ ${submissionText.slice(0, 5000)}
 """
 
 CRITICAL RULES:
-- NEVER read out or repeat text from the submission in your messages
+- NEVER read out or repeat text from the student's work in your messages
 - If you need to show text to the user, use show_text_segment() - don't speak it
 - ADAPT to their responses - if they give you an answer, acknowledge it and move forward, even if incomplete
 - DO NOT repeat the same question if they've already answered or moved past it
@@ -410,23 +410,29 @@ CRITICAL RULES:
 - If an answer is vague or off-topic, ask ONE brief follow-up then move on
 - Cover multiple aspects of their work, don't fixate on one point
 - Keep the conversation flowing naturally - avoid getting stuck
+- Patience runs out: as the interview progresses, you can decide to end the interview early
+- Interview budget: you have about 8 to 12 questions to figure out if the student wrote their own work
 
 STYLE:
-- Ultra brief: 1 sentence per message when possible
+- Brief: 1 sentence per message when possible
 - Conversational and natural, not interrogative
 - Use acknowledgments: "Got it," "Thanks," "Okay," then ask next question
 - NO numbering or labeling questions
 - Stay neutral: no assessments of right/wrong
-- DO NOT quote or read text aloud - use the function instead
+- Plain text: no formatting or styling
 
 SNIPPET USAGE:
-- **CRITICAL**: NEVER include the answer in the snippet - always replace it with "___" or "[hidden]"
+- CRITICAL: NEVER quote text in your questions - if you need to reference specific text, use show_text_segment() but NEVER repeat it in the question because it takes a lot of time
+- Example: DON'T say "You wrote 'X'" instead call show_text_segment() and ask "What does this mean to you?"
 - Keep snippets SHORT (1-3 sentences max)
-- Use ONLY for fill-in-the-gap questions where you hide the key information
-- Example: Show "The author argues that ___ is the primary cause" (hiding the actual argument)
+- NEVER include the answer in the snippet - if you ask about a specific part of the text, hide the answer to your question in the snippet so that the student can't cheat
+- Always hide_text_segment() after they answer
+
+FILL-IN-THE-GAP EXAMPLE:
+- This is a type of question where you test the student's ability to recall specific information from their work
+- Show "The author argues that ___ is the primary cause" (hiding the actual argument)
 - Then ask: "What goes in the blank?"
 - The answer should NOT be visible in the snippet - student must recall it from their work
-- Always hide_text_segment() after they answer
 
 AVAILABLE FUNCTIONS:
 - show_text_segment(segment): Display a SHORT snippet with key parts replaced by "___" - DO NOT show answers
@@ -502,8 +508,11 @@ End the interview once you have a reasonable sense of their understanding. Don't
           setVisibleSegment(null);
           contentResponse = 'hidden';
         } else if (fnName === 'finish_interview') {
-          saveTranscript();
-          setIsComplete(true);
+          // Wait 10 seconds for final audio to finish playing before completing
+          setTimeout(() => {
+            saveTranscript();
+            setIsComplete(true);
+          }, 10000);
           contentResponse = 'finished';
         } else {
           contentResponse = 'noop';
@@ -661,6 +670,13 @@ End the interview once you have a reasonable sense of their understanding. Don't
                   </Button>
                 </div>
               )}
+
+              {/* Hidden Mic component - handles audio input */}
+              {token && !error && client && (
+                <div className="hidden">
+                  <Mic state={isMuted ? 'closed' : micState} client={client} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -677,14 +693,11 @@ End the interview once you have a reasonable sense of their understanding. Don't
       </div>
       {/* Network speed bar at the bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-40">
-        <div className="max-w-5xl mx-auto px-6 pb-4">
+        <div className="max-w-5xl mx-auto px-6 pb-4 pt-6">
           <div className="bg-white border border-border rounded-lg shadow-sm p-3">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Network</span>
               <span className="text-xs font-semibold">{Math.round(connectionQuality)}%</span>
-            </div>
-            <div className="mt-2 h-2 bg-muted rounded">
-              <div className="h-2 rounded bg-primary" style={{ width: `${connectionQuality}%` }} />
             </div>
             <div className="mt-1 text-[10px] text-muted-foreground">Deepgram RTT {rttMs > 1 ? Math.round(rttMs) + ' ms' : 'estimating…'} • Adaptive buffer ~{connectionQuality >= 80 ? '250' : connectionQuality >= 50 ? '375' : connectionQuality >= 25 ? '500' : '750'}ms</div>
           </div>
